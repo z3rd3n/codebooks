@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nr-csi"
+version = "0.1.0"
+description = "3GPP NR PMI codebook benchmark framework (R15-R18): Type I/II, eType II, FeType II PS, Doppler codebooks"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+sionna = [
+    "sionna>=1.0",
+    "tensorflow>=2.16",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: long-running statistical reproduction tests (deselect with '-m \"not slow\"')",
+    "sionna: requires the optional sionna/tensorflow extra",
+]
