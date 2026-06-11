@@ -54,6 +54,30 @@ class R16Type2PMI:
     c: np.ndarray | None = None  # (v, Mv, 2L) phase indices, 0..15
 
 
+def select_taps(
+    tap_energy: np.ndarray, Mv: int, N3: int, m_initial: int | None = None
+) -> list[int]:
+    """Top-Mv taps (remapped energies, index 0 strongest), honoring the
+    2*Mv window constraint when N3 > 19.  ``m_initial`` (in {-2Mv+1..0})
+    restricts the search to one window so all layers share i_{1,5}."""
+    if Mv == 1:
+        return [0]
+    if N3 <= 19:
+        top = np.argsort(tap_energy)[::-1][:Mv]
+        return sorted(int(x) for x in top)
+    candidates = range(0, -2 * Mv, -1) if m_initial is None else [m_initial]
+    best = (-1.0, None)
+    for m_init in candidates:
+        window = [(m_init + j) % N3 for j in range(2 * Mv)]
+        others = [w for w in window if w != 0]
+        others.sort(key=lambda n: -tap_energy[n])
+        sel = [0] + others[: Mv - 1]
+        e = float(sum(tap_energy[n] for n in sel))
+        if e > best[0]:
+            best = (e, sorted(sel))
+    return best[1]
+
+
 def encode_i18(bitmap_l: np.ndarray, i_star: int, rank: int) -> int:
     """Strongest-coefficient indicator (paper's dual-mode definition).
 
@@ -243,25 +267,7 @@ class R16Type2Codebook(CodebookScheme):
     def _select_taps(
         self, tap_energy: np.ndarray, Mv: int, m_initial: int | None = None
     ) -> list[int]:
-        """Top-Mv taps (remapped energies, index 0 strongest), honoring the
-        2*Mv window constraint when N3 > 19.  ``m_initial`` (in {-2Mv+1..0})
-        restricts the search to one window so all layers share i_{1,5}."""
-        if Mv == 1:
-            return [0]
-        if self.N3 <= 19:
-            top = np.argsort(tap_energy)[::-1][:Mv]
-            return sorted(int(x) for x in top)
-        candidates = range(0, -2 * Mv, -1) if m_initial is None else [m_initial]
-        best = (-1.0, None)
-        for m_init in candidates:
-            window = [(m_init + j) % self.N3 for j in range(2 * Mv)]
-            others = [w for w in window if w != 0]
-            others.sort(key=lambda n: -tap_energy[n])
-            sel = [0] + others[: Mv - 1]
-            e = float(sum(tap_energy[n] for n in sel))
-            if e > best[0]:
-                best = (e, sorted(sel))
-        return best[1]
+        return select_taps(tap_energy, Mv, self.N3, m_initial)
 
     def _enforce_total_budget(
         self, pmi: R16Type2PMI, kept: list[np.ndarray], stars: list[int]
