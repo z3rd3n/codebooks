@@ -121,3 +121,66 @@ tests/                         # see test matrix below
 4. `python scripts/reproduce_f2.py` → compare `results/f2.png` against `paper/pictures/f2.pdf` (log-scale bars, R15 ≈ 10× R16 > R18).
 5. `python scripts/reproduce_f1.py` → compare `results/f1.png` against `paper/pictures/f1.pdf` (curve ordering, gaps, spot values).
 6. README example: wrap a dummy "ML scheme" (e.g., truncated-SVD oracle) in the harness to demonstrate the drop-in comparison workflow end-to-end.
+
+
+## paper (main.tex) sections for further look-up info (refer to the specific sections of the main.tex without wasting the context by only reading specific chunks of the file):
+    2956 /Users/eranil/Codes/codebooks/paper/main.tex
+76:\title{Precoding Matrix Indicator in the 5G NR Protocol:\\ A Tutorial on 3GPP Beamforming Codebooks}
+101:\section{Introduction}
+140:\section{Background on Beamforming}\label{Background}
+145:\subsection{Downlink OFDM  MIMO Systems}
+160:\subsection{Full CSI-Based Beamforming}
+167:\subsection{Codebook-Based Beamforming}
+174:\subsubsection{Exhaustive Beam Training}  
+177:\subsubsection{Multi-stage Beam Training}  
+180:\subsubsection{Codebook Indicator Feedback}  
+185:\section{Background on 3GPP Standard}\label{3gppcodebook}
+196:\subsection{CSI-RS Measurement and Feedback} \label{flow}
+216:\subsection{Codebook Matrix and Antenna Configuration}
+268:% \subsection{Two Types of Codebooks}
+283:\section{Codebook Fundamentals}\label{funds}
+292:\subsection{Port External Beamforming}
+295:\subsection{Regular Codebook Fundamentals}
+343:\subsection{Port-Selection Codebook Fundamentals}
+403:\section{5G Codebook Evolution}\label{SecPMI}
+406:\subsection{R15 Type I Regular Codebook Mode 1}
+582:\subsection{R15 Type I Regular Codebook Mode 2}
+636:\subsection{R15 Type II Regular Codebook}\label{regularII}
+1067:\subsection{R16 Enhanced Type II Regular Codebook}\label{enhanceregularII}
+1375:\subsection{R17 Further Enhanced Type II Port-Selection Codebook}
+1633:\subsection{R18 Enhanced Type II Codebook for Predicted PMI}
+1836:\section{Discussion of 5G Codebooks}\label{comparisonandapp}
+1839:\subsection{Compact Model}
+1845:\subsubsection{Bases in the Space Domain}
+1895:\subsubsection{Bases in the Frequency Domain}
+1915:\subsubsection{Bases in the Temporal Domain}
+1934:\subsubsection{Compact Model for R15 Type I}
+1949:\subsubsection{Compact Model for R15 Type II}
+1968:\subsubsection{Compact Model for R16 Type II}
+2013:\subsubsection{Compact Model for R17 Type II}
+2078:\subsubsection{Compact Model for R18 Type II}
+2163:\subsection{Codebook Performance}
+2250:\subsection{Feedback Comparison}
+2263:\subsection{Applicable Scenarios}
+2267:\section{Future Directions and Other Scenarios}\label{futuredirection}
+2270:\subsection{Research Directions for Massive MIMO Beamforming}
+2272:\subsubsection{Evolution of Codebook Bases}
+2275:\subsubsection{Innovative Frameworks for Codebook}
+2279:\subsubsection{Hierarchical Codebook Structures}
+2281:\subsubsection{Analog Beamforming Codebooks}
+2284:\subsection{Other MIMO-Related Features}
+2299:\subsubsection{Terahertz Beamforming}
+2304:\subsubsection{Near-field Beamforming}
+2307:\subsubsection{Passive Beamforming}
+2312:\subsubsection{Distributed MIMO Beamforming}
+2316:\subsubsection{Sensing Applications}
+2322:\section{Conclusion}\label{conclusion}
+2326:\section{Details of Full CSI-based Beamforming}\label{appdA}
+2328:\subsection{SU-MIMO}\label{BF-SU-MIMO}
+2365:\subsection{MU-MIMO}
+2460:\subsection{Power Allocation}
+2540:\section{Resource Allocation for CSI-RS}\label{resource}
+2628:\section{Reporting Configuration for CSI-RS}\label{reporting}
+2707:\section{Port-Selection Codebooks in R15-16}
+2741:\subsection{R15 Type II Port-Selection Codebook} \label{r15ps}
+2818:\subsection{R16 Enhanced Type II Port-Selection Codebook} \label{r16ps}
