@@ -1,2 +1,7 @@
 # paper
-paper/
+paper/.venv/
+results/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.DS_Store
