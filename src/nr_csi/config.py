@@ -13,7 +13,7 @@ which mirrors TS 38.214:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from fractions import Fraction
 
 # (N1, N2) -> (O1, O2), keyed exactly as in the paper's Table tabNO.

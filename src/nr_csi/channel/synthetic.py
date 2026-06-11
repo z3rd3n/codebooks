@@ -24,7 +24,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..config import AntennaConfig
-from ..utils import dft
 from .base import ChannelSource
 
 
