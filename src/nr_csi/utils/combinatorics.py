@@ -91,7 +91,9 @@ def decode_restriction_groups(beta1: int, O1: int, O2: int) -> tuple[list[int], 
 # Algorithm 3: delay-tap selection i_{1,6,l} (with two-level indication N3>19)
 # ---------------------------------------------------------------------------
 
-def encode_taps(n3: list[int], N3: int, Mv: int) -> tuple[int, int | None]:
+def encode_taps(
+    n3: list[int], N3: int, Mv: int, m_initial: int | None = None
+) -> tuple[int, int | None]:
     """Selected taps (already remapped, n3^(0)=0) -> (i_{1,6,l}, i_{1,5} or None).
 
     For N3 <= 19 the Mv-1 nonzero taps are encoded directly out of N3-1.
@@ -99,6 +101,8 @@ def encode_taps(n3: list[int], N3: int, Mv: int) -> tuple[int, int | None]:
     {M_initial, ..., M_initial+2Mv-1} (mod N3) with M_initial in {-2Mv+1,..,0};
     the window-relative index of a tap t is t itself for the non-negative part
     and t-(N3-2Mv) for the wrapped part (inverse of Algorithm 3's mapping).
+    ``m_initial`` forces a specific window (i_{1,5} is reported once but
+    i_{1,6,l} is per-layer, so all layers must share the same window).
     """
     taps = sorted(n3)
     if taps[0] != 0:
@@ -109,13 +113,14 @@ def encode_taps(n3: list[int], N3: int, Mv: int) -> tuple[int, int | None]:
     if N3 <= 19:
         i16 = combo_to_index([t - 1 for t in rest], N3 - 1)
         return i16, None
-    for m_init in range(0, -2 * Mv, -1):
+    candidates = range(0, -2 * Mv, -1) if m_initial is None else [m_initial]
+    for m_init in candidates:
         if all(t <= m_init + 2 * Mv - 1 or t >= N3 + m_init for t in rest):
             rel = sorted(t if t <= m_init + 2 * Mv - 1 else t - (N3 - 2 * Mv) for t in rest)
             i16 = combo_to_index([r - 1 for r in rel], 2 * Mv - 1)
             i15 = m_init if m_init == 0 else m_init + 2 * Mv
             return i16, i15
-    raise ValueError(f"taps {taps} do not fit any 2*Mv={2*Mv} window for N3={N3}")
+    raise ValueError(f"taps {taps} do not fit the 2*Mv={2*Mv} window(s) for N3={N3}")
 
 
 def decode_taps(i16: int, N3: int, Mv: int, i15: int | None = None) -> list[int]:
