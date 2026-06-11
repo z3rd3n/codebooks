@@ -30,6 +30,7 @@ from ..config import AntennaConfig
 from ..utils import combinatorics as cb
 from ..utils import dft
 from ..utils import quantization as qt
+from . import _spatial
 from .base import CodebookScheme
 
 
@@ -162,58 +163,18 @@ class R15Type2Codebook(CodebookScheme):
 
         H = np.asarray(H)[-1]  # (N3, Nr, P)
         targets = eigen_precoder(H, rank=rank) * np.sqrt(rank)  # (N3, P, v) unit columns
-        a = self.antenna
-        half = a.P // 2
 
         pmi = R15Type2PMI(rank=rank)
         if self.port_selection:
-            energy = np.sum(np.abs(targets) ** 2, axis=(0, 2))  # (P,)
-            port_energy = energy[:half] + energy[half:]
-            n_init = math.ceil(half / self.d)
-            scores = [
-                sum(port_energy[(j * self.d + i) % half] for i in range(self.L))
-                for j in range(n_init)
-            ]
-            pmi.i11_ps = int(np.argmax(scores))
+            pmi.i11_ps = _spatial.select_ps_initial(self.antenna, targets, self.L, self.d)
         else:
-            # Each orthogonal group spans the full space, so total projected
-            # energy is group-independent; rank groups by the energy captured
-            # by their best L beams instead.
-            best = (-1.0, None)
-            for q1 in range(a.O1):
-                for q2 in range(a.O2):
-                    Bg = dft.orthogonal_group(a, q1, q2)  # (N1N2, P/2)
-                    proj = self._project(Bg, targets)
-                    be = np.sum(np.abs(proj) ** 2, axis=(0, 1, 2))  # per-beam
-                    e = float(np.sort(be)[::-1][: self.L].sum())
-                    if e > best[0]:
-                        best = (e, (q1, q2, be))
-            q1, q2, beam_energy = best[1]
-            top = np.sort(np.argsort(beam_energy)[::-1][: self.L])
-            n1 = [int(n % a.N1) for n in top]
-            n2 = [int(n // a.N1) for n in top]
-            pmi.q1, pmi.q2, pmi.i12 = q1, q2, cb.encode_beam_combination(n1, n2, a.N1, a.N2)
-
+            pmi.q1, pmi.q2, pmi.i12 = _spatial.select_group_and_beams(
+                self.antenna, targets, self.L
+            )
         B = self._basis(pmi)  # (L, P/2)
-        scale = self._beta_factor()
-        # LS coefficients per (layer, subband, 2L): orthonormal-up-to-scale bases
-        coeff = np.empty((rank, self.N3, 2 * self.L), dtype=complex)
-        for li in range(rank):
-            for t in range(self.N3):
-                w = targets[t, :, li]
-                coeff[li, t, : self.L] = (B.conj() @ w[:half]) / scale
-                coeff[li, t, self.L :] = (B.conj() @ w[half:]) / scale
-
+        coeff = _spatial.ls_coefficients(B, targets, self._beta_factor())
         self._quantize_into(pmi, coeff)
         return pmi
-
-    @staticmethod
-    def _project(Bg: np.ndarray, targets: np.ndarray) -> np.ndarray:
-        """Projections onto group beams: (N3, v, pol, n_beams)."""
-        half = Bg.shape[1]
-        # targets: (N3, P, v) -> pols: (N3, pol, P/2, v)
-        pols = np.stack([targets[:, :half, :], targets[:, half:, :]], axis=1)
-        return np.einsum("bp,nopv->nvob", Bg.conj(), pols)
 
     def _quantize_into(self, pmi: R15Type2PMI, coeff: np.ndarray) -> None:
         """Fill i13/k1/k2/c from LS coefficients (v, N3, 2L)."""
