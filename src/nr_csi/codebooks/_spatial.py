@@ -25,6 +25,9 @@ def aligned_eigen_targets(H: np.ndarray, rank: int) -> np.ndarray:
     """
     from ..baselines.ideal import eigen_precoder
 
+    n_rx = H.shape[-2]
+    if rank > min(n_rx, H.shape[-1]):
+        raise ValueError(f"rank {rank} exceeds channel rank bound min(Nr={n_rx}, P)")
     targets = eigen_precoder(H, rank=rank) * np.sqrt(rank)  # unit columns
     for t in range(1, targets.shape[0]):
         inner = np.sum(targets[t - 1].conj() * targets[t], axis=0)  # (v,)
