@@ -98,6 +98,34 @@ def evaluate(
     )
 
 
+def select_rank(
+    scheme: CodebookScheme,
+    H: np.ndarray,
+    rho: float = 10.0,
+    ranks: tuple[int, ...] = (1, 2, 3, 4),
+):
+    """Auto-RI: pick the rank whose reported precoder maximizes SE on ``H``.
+
+    Ranks the scheme refuses (unsupported, prohibited by a rank-restriction
+    bitmap, or beyond the channel rank) are skipped.  Returns
+    (rank, pmi, W, se).
+    """
+    best = None
+    for rank in ranks:
+        try:
+            pmi = scheme.select(H, rank=rank)
+        except ValueError:
+            continue
+        W = scheme.precoder(pmi)
+        W_all = W if W.shape[0] == H.shape[0] else np.repeat(W[-1:], H.shape[0], axis=0)
+        se = su_rate(H, W_all, rho)
+        if best is None or se > best[3]:
+            best = (rank, pmi, W, se)
+    if best is None:
+        raise ValueError("no admissible rank for this scheme/channel")
+    return best
+
+
 @dataclass
 class MuEvalResult:
     scheme: str

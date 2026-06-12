@@ -147,6 +147,40 @@ CSI metric — and NMSE (`metrics.similarity`), feedback bits
 6. Type I ranks 3–8 need TS 38.214 tables that the paper does not include;
    they are out of scope (extension hooks in `codebooks/type1.py`).
 
+## Traceability matrix (paper → code → test)
+
+| Paper anchor | Implementing module | Test |
+|---|---|---|
+| Table tabNO (N1,N2,O1,O2) | `config.SUPPORTED_N1N2` | `test_config_tables.py::TestTabNO` |
+| Tables tabp / tabp17 / tabpredic (param combos) | `config.R16/R17/R18_PARAM_COMBOS` | `test_config_tables.py::TestParamComboTables` |
+| Table tabCSS (subband sizes), eq. c66 (M_v), K0 | `config.n3_for_bwp`, `config.m_v`, codebook `.K0` | `test_config_tables.py::TestTabCSS/TestDerivedQuantities` |
+| Eq. vmm / beamv (spatial DFT bases), y_f, z_τ | `utils.dft` | `test_dft_bases.py` |
+| Algorithms 1–4 (combinatorial codecs) | `utils.combinatorics` | `test_combinatorics.py` |
+| Tables tabk1 / tabk2 / tabmapkuan / tabmapzhai | `utils.quantization` | `test_quantization.py`, `test_compression_properties.py::TestQuantizerDistortionBounds` |
+| Tables tabmode1/tabmode2 + tabmap (Type I) | `codebooks.type1` | `test_type1.py` |
+| Eq. a46 + Table tabtypeii (R15 Type II), SA rules | `codebooks.type2_r15` | `test_type2_r15.py` |
+| Eqs. a58/a59 + Table tabmaxap (subset restriction) | `codebooks.type2_r15.TypeIIRestriction` | `test_restrictions_and_harness.py::TestSubsetRestriction` |
+| RI restriction (Type I 8-bit r; r18 4-bit) | `type1`/`etype2_r18` `rank/ri_restriction` | `test_restrictions_and_harness.py::TestRankRestriction` |
+| Table tabesII (R16), i18 dual mode, two-level taps | `codebooks.etype2_r16` | `test_etype2_r16.py` |
+| Table tabesps + eq. a86 (R16 PS), eq. psy ≡ regy | `etype2_r16(port_selection=True)` | `test_equivalences.py::TestR16PortSelectionPEB` |
+| Table tabfesp + eq. a104 (R17), Algorithm 4 errata | `codebooks.fetype2_r17` | `test_fetype2_r17.py`, `test_equivalences.py::TestR17VsR16PS` |
+| Table tab1 + eq. a127 (R18 Doppler), N4=1 ≡ R16 | `codebooks.etype2_r18` | `test_etype2_r18.py`, `test_compression_properties.py::TestR18N4Sweep` |
+| PMI compositions (a85/a86/a104/a127 + R15/Type I) | each codebook's `overhead_bits` | `test_pmi_composition.py` |
+| Compact/Tucker models (Sec. "Compact Model") | `codebooks.compact` | `test_type1.py`/`test_type2_r15.py`/`test_etype2_r16.py`/`test_etype2_r18.py` `TestCompactModel` rows |
+| Tables bit1/bit2 (overhead formulas) | `metrics.overhead` | `test_overhead.py` (incl. frozen golden dicts) |
+| Actual feedback bitstream | `codebooks.serialize` | `test_serialize.py` |
+| Eq. (2) SU/MU achievable rate, SGCS | `metrics.se`, `metrics.similarity` | `test_eval_spine.py` |
+| Fig. f1 (SE vs SNR, digitized 9×7 table) | `eval.f1` | `test_f1_paper_values.py`, `test_f1_curves.py` (slow) |
+| Fig. f2 (feedback bits vs L) | `metrics.overhead.f2_comparison` | `test_overhead.py::TestF2Claims` |
+| Qualitative comparison table (Sec. "Discussion") | — | `test_paper_claims.py` (slow) |
+| Appendix A (SVD/MRT/ZF/RZF/MMSE/GMD/EZF/BD/WMMSE, water-filling, harmonic mean) | `baselines.ideal` | `test_eval_spine.py`, `test_baselines_appendix.py` |
+| 38.901 CDL channels (Sionna), port mapping | `channel.sionna_adapter` | `test_sionna_integration.py` (`-m sionna`) |
+
+Out of scope (documented): CSI-RS resource mapping / Gold sequences (paper
+Appendices B–C, orthogonal to the codebooks), Type I multi-panel and ranks
+3–8 (Modes 1–2; tables not in the paper), R19 (future phase), exact f2 bar
+heights (erratum 4).
+
 ## Layout
 
 ```
