@@ -71,6 +71,42 @@ python scripts/reproduce_f1.py   # SE vs SNR: Type I vs Type II vs eigen bound -
 python scripts/reproduce_f2.py   # feedback bits vs L: R15/R16/R18            -> results/f2.png
 ```
 
+## Comparison figure gallery
+
+`scripts/fig_*.py` compare all codebook families along every axis the
+harness measures (plan: `plans/plan_figures.md`; shared conventions in
+`scripts/figlib.py` — paired seeds, port-selection codebooks evaluated
+through a unitary DFT PEB, every PNG paired with a JSON of the plotted
+numbers). Regenerate everything with:
+
+```bash
+python scripts/make_all_figures.py           # full quality -> results/fig_*.png
+python scripts/make_all_figures.py --fast    # smoke-test sizes
+python scripts/fig_02_rate_distortion.py --drops 200 --seed 1   # any one figure
+```
+
+| Figure | Comparison |
+|---|---|
+| `fig_01_se_vs_snr` | SE vs SNR, all families + eigen bound, ranks 1–2 |
+| `fig_02_rate_distortion` | SGCS / SE vs feedback bits over every config knob, Pareto frontier (the plane an ML scheme must beat) |
+| `fig_03_overhead_breakdown` | per-PMI-element bits, grouped by what they encode |
+| `fig_04_overhead_scaling` | bits vs N₃ / L / N₄ coverage (Tables bit1/bit2) |
+| `fig_05_mobility` | CSI aging vs the R18 predicted PMI (per-interval SGCS, feedback delay) |
+| `fig_06_mu_mimo` | ZF sum rate from reported PMIs vs SNR and user count |
+| `fig_07_rank_adaptation` | fixed ranks 1–4 vs auto-RI, rank distribution vs SNR |
+| `fig_08_channel_sensitivity` | robustness to channel sparsity and estimation noise |
+| `fig_09_port_selection` | regular vs PS codebooks on antenna- vs beam-domain channels |
+| `fig_10_array_scaling` | SE / gap-to-bound / SGCS / bits vs array size (P = 8…32, all families + (16,1) aspect contrast) |
+| `fig_11_frequency_granularity` | fidelity and cost vs N₃: per-subband (R15) vs M_v-tap (R16) reporting |
+| `fig_12_summary` | normalized radar scorecard + raw-numbers table (`results/fig_12_summary_table.md`) |
+
+Every figure has a hand-written analysis next to it
+(`results/<figure>.md`): what it shows, the mechanism behind each trend,
+and investigations of the initially surprising results (Type I's rank-2
+SGCS collapse, the R18 K₀ = ⌈2βLM₁Q⌉ static-channel budget bonus, R17's
+fidelity *rising* with P, the windowed-PS vs free-PS gap, the measurement-
+noise ranking inversion, the L = 1 overhead inversion in f2).
+
 ## Comparing your ML CSI algorithm
 
 Implement the same three methods and run it through the harness next to the
