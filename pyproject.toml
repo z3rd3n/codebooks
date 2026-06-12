@@ -21,10 +21,25 @@ sionna = [
 ]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+# E731: lambdas are used for tiny inline predicates.
+# E741: l/m/v are the paper's own symbol names (layer, beam indices).
+ignore = ["E731", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_sionna_integration.py" = ["E402"]  # imports after importorskip
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

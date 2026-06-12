@@ -4,8 +4,10 @@ The tables transcribed here come from the tutorial paper (paper/main.tex),
 which mirrors TS 38.214:
 
 * ``SUPPORTED_N1N2``      -- Table "Supported Configurations of (N1,N2) and (O1,O2)"
-* ``R16_PARAM_COMBOS``    -- Table "Parameter Configurations for L, beta, p_v" (paramCombination-r16)
-* ``R17_PARAM_COMBOS``    -- Table "Parameter Configurations for alpha, M, beta" (paramCombination-r17)
+* ``R16_PARAM_COMBOS``    -- Table "Parameter Configurations for L, beta, p_v"
+                             (paramCombination-r16)
+* ``R17_PARAM_COMBOS``    -- Table "Parameter Configurations for alpha, M, beta"
+                             (paramCombination-r17)
 * ``R18_PARAM_COMBOS``    -- Table "Codebook Parameter Configurations for L, beta, p_v"
                              (paramCombination-Doppler-r18)
 """
@@ -192,7 +194,9 @@ class R18ParamCombo:
             return self.p_v12
         if v in (3, 4):
             if self.p_v34 is None:
-                raise ValueError(f"rank {v} unsupported for paramCombination-Doppler-r18={self.index}")
+                raise ValueError(
+                    f"rank {v} unsupported for paramCombination-Doppler-r18={self.index}"
+                )
             return self.p_v34
         raise ValueError("rank must be 1..4")
 
@@ -219,3 +223,27 @@ SUBBAND_SIZES: list[tuple[range, tuple[int, int]]] = [
     (range(73, 145), (8, 16)),
     (range(145, 276), (16, 32)),
 ]
+
+
+def subband_size_options(n_rb: int) -> tuple[int, int]:
+    """Allowed subband sizes (RBs) for a BWP of ``n_rb`` RBs (Table tabCSS)."""
+    for rng, sizes in SUBBAND_SIZES:
+        if n_rb in rng:
+            return sizes
+    raise ValueError(f"BWP size {n_rb} RB outside the 24..275 range of Table tabCSS")
+
+
+def n3_for_bwp(n_rb: int, subband_size: int, R: int = 1) -> int:
+    """N3 = (number of configured subbands) * R for a BWP of ``n_rb`` RBs.
+
+    The paper's worked example: 273 RB with subband size 16 -> 18 subbands.
+    """
+    options = subband_size_options(n_rb)
+    if subband_size not in options:
+        raise ValueError(
+            f"subband size {subband_size} not allowed for {n_rb} RB; "
+            f"Table tabCSS permits {options}"
+        )
+    if R not in (1, 2):
+        raise ValueError("R must be 1 or 2")
+    return math.ceil(n_rb / subband_size) * R

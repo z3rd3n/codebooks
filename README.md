@@ -31,6 +31,26 @@ compact matrix/Tucker models); `select` is one reasonable UE algorithm
 (eigen targets → orthogonal-group/beam selection → FFT tap/shift selection →
 spec quantization), since the UE side is not standardized.
 
+Also implemented:
+
+* **Bit-level serialization** (`nr_csi.codebooks.pack/unpack`): the actual
+  feedback bitstream; `len(pack(pmi)) == total_overhead_bits(pmi)` and
+  `unpack(pack(pmi)) == pmi` are asserted for every configuration, so the
+  overhead numbers used in comparisons are honest.
+* **Runtime PMI validation** (`codebooks/validate.py`): every `precoder()`
+  rejects malformed reports (shapes, index ranges, strongest-coefficient
+  conventions).
+* **Codebook subset restriction** (`TypeIIRestriction`, paper eqs. a58/a59 +
+  Table tabmaxap): restricted beams are never selected; wideband amplitudes
+  are capped. Rank restriction bitmaps for Type I (8-bit `r`) and R18
+  (4-bit `typeII-Doppler-RI-Restriction-r18`).
+* **Evaluation harness extras** (`nr_csi.eval`): `feedback_delay_slots`
+  (CSI aging) and `measurement_snr_db` (estimation noise) knobs on
+  `evaluate`, plus `evaluate_mu` for MU-MIMO ZF/RZF sum rates from reported
+  PMIs (paper eq. 2) against a full-CSI reference.
+* **Table tabCSS wiring**: `nr_csi.config.n3_for_bwp(n_rb, subband_size, R)`
+  and BWP-driven subband mapping in `SionnaCDLChannel(n_rb=..., subband_size=...)`.
+
 ## Install & test
 
 ```bash
@@ -40,6 +60,8 @@ pytest -m "not slow and not sionna"   # spec-level unit suite (fast)
 pytest -m slow                        # Fig. f1 statistical reproduction
 pip install -e ".[sionna]"            # optional: TensorFlow + Sionna
 pytest -m sionna                      # 38.901 CDL end-to-end integration
+scripts/check.sh                      # lint (ruff) + fast + slow suites
+scripts/check.sh --with-sionna --cov  # everything, with coverage
 ```
 
 ## Reproducing the paper's figures
@@ -104,9 +126,15 @@ CSI metric — and NMSE (`metrics.similarity`), feedback bits
    8-PSK (3 bits); configurable in `eval.f1`.
 3. **Fig. f1 channel** is unspecified; we use a sparse multipath ULA channel
    normalized so E‖h‖² = N, which matches the figure's upper-bound curve.
-   The paper's 2-stream Type I procedure is also unspecified; we restrict the
-   second beam to the spec's i₁,₃ offsets (Table tabmap), which brackets the
-   paper's curve from below (an unrestricted search brackets it from above).
+   The paper's 2-stream Type I procedure is also unspecified: the spec's
+   i₁,₃ offsets (Table tabmap) bracket the paper's curve from below, an
+   unrestricted second-beam search from above. A least-squares calibration
+   against the digitized figure (`eval.f1.calibrate_f1`) selected 8 paths
+   with the unrestricted variant (`eval.f1.F1_REPRODUCTION`); all 63
+   digitized points then reproduce within max(±0.6 b/s/Hz, ±8%)
+   (`tests/test_f1_paper_values.py`). Known residual: the paper's N=4
+   single-stream Type I curve sits closer to Type II (~0.15 b/s/Hz) than
+   spec-faithful selection allows (~0.5) on every channel family swept.
 4. **Fig. f2 absolute bar values are not derivable from the paper's own
    Tables bit1/bit2** with the stated parameters (the bars imply an R15/R16
    ratio ≈17× at L=4; the table formulas give ≈3× under any consistent
@@ -118,6 +146,40 @@ CSI metric — and NMSE (`metrics.similarity`), feedback bits
    reused for the PS variant here.
 6. Type I ranks 3–8 need TS 38.214 tables that the paper does not include;
    they are out of scope (extension hooks in `codebooks/type1.py`).
+
+## Traceability matrix (paper → code → test)
+
+| Paper anchor | Implementing module | Test |
+|---|---|---|
+| Table tabNO (N1,N2,O1,O2) | `config.SUPPORTED_N1N2` | `test_config_tables.py::TestTabNO` |
+| Tables tabp / tabp17 / tabpredic (param combos) | `config.R16/R17/R18_PARAM_COMBOS` | `test_config_tables.py::TestParamComboTables` |
+| Table tabCSS (subband sizes), eq. c66 (M_v), K0 | `config.n3_for_bwp`, `config.m_v`, codebook `.K0` | `test_config_tables.py::TestTabCSS/TestDerivedQuantities` |
+| Eq. vmm / beamv (spatial DFT bases), y_f, z_τ | `utils.dft` | `test_dft_bases.py` |
+| Algorithms 1–4 (combinatorial codecs) | `utils.combinatorics` | `test_combinatorics.py` |
+| Tables tabk1 / tabk2 / tabmapkuan / tabmapzhai | `utils.quantization` | `test_quantization.py`, `test_compression_properties.py::TestQuantizerDistortionBounds` |
+| Tables tabmode1/tabmode2 + tabmap (Type I) | `codebooks.type1` | `test_type1.py` |
+| Eq. a46 + Table tabtypeii (R15 Type II), SA rules | `codebooks.type2_r15` | `test_type2_r15.py` |
+| Eqs. a58/a59 + Table tabmaxap (subset restriction) | `codebooks.type2_r15.TypeIIRestriction` | `test_restrictions_and_harness.py::TestSubsetRestriction` |
+| RI restriction (Type I 8-bit r; r18 4-bit) | `type1`/`etype2_r18` `rank/ri_restriction` | `test_restrictions_and_harness.py::TestRankRestriction` |
+| Table tabesII (R16), i18 dual mode, two-level taps | `codebooks.etype2_r16` | `test_etype2_r16.py` |
+| Table tabesps + eq. a86 (R16 PS), eq. psy ≡ regy | `etype2_r16(port_selection=True)` | `test_equivalences.py::TestR16PortSelectionPEB` |
+| Table tabfesp + eq. a104 (R17), Algorithm 4 errata | `codebooks.fetype2_r17` | `test_fetype2_r17.py`, `test_equivalences.py::TestR17VsR16PS` |
+| Table tab1 + eq. a127 (R18 Doppler), N4=1 ≡ R16 | `codebooks.etype2_r18` | `test_etype2_r18.py`, `test_compression_properties.py::TestR18N4Sweep` |
+| PMI compositions (a85/a86/a104/a127 + R15/Type I) | each codebook's `overhead_bits` | `test_pmi_composition.py` |
+| Compact/Tucker models (Sec. "Compact Model") | `codebooks.compact` | `test_type1.py`/`test_type2_r15.py`/`test_etype2_r16.py`/`test_etype2_r18.py` `TestCompactModel` rows |
+| Tables bit1/bit2 (overhead formulas) | `metrics.overhead` | `test_overhead.py` (incl. frozen golden dicts) |
+| Actual feedback bitstream | `codebooks.serialize` | `test_serialize.py` |
+| Eq. (2) SU/MU achievable rate, SGCS | `metrics.se`, `metrics.similarity` | `test_eval_spine.py` |
+| Fig. f1 (SE vs SNR, digitized 9×7 table) | `eval.f1` | `test_f1_paper_values.py`, `test_f1_curves.py` (slow) |
+| Fig. f2 (feedback bits vs L) | `metrics.overhead.f2_comparison` | `test_overhead.py::TestF2Claims` |
+| Qualitative comparison table (Sec. "Discussion") | — | `test_paper_claims.py` (slow) |
+| Appendix A (SVD/MRT/ZF/RZF/MMSE/GMD/EZF/BD/WMMSE, water-filling, harmonic mean) | `baselines.ideal` | `test_eval_spine.py`, `test_baselines_appendix.py` |
+| 38.901 CDL channels (Sionna), port mapping | `channel.sionna_adapter` | `test_sionna_integration.py` (`-m sionna`) |
+
+Out of scope (documented): CSI-RS resource mapping / Gold sequences (paper
+Appendices B–C, orthogonal to the codebooks), Type I multi-panel and ranks
+3–8 (Modes 1–2; tables not in the paper), R19 (future phase), exact f2 bar
+heights (erratum 4).
 
 ## Layout
 

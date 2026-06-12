@@ -1,7 +1,6 @@
 """Anchors for the synthetic channel, ideal baselines, and SE/SGCS metrics."""
 
 import numpy as np
-import pytest
 
 from nr_csi.baselines import eigen_precoder, mmse, zf
 from nr_csi.channel import Ray, SyntheticRayChannel
@@ -108,3 +107,83 @@ class TestSimilarity:
         w1 = np.array([1, 0], dtype=complex)[:, None]
         w2 = np.array([0, 1], dtype=complex)[:, None]
         assert np.isclose(nmse(w1, w2), 2.0)  # orthogonal unit vectors
+
+
+class TestMetricEdgeCases:
+    def test_sgcs_zero_columns(self):
+        w = np.array([1, 1j, 0, 0], dtype=complex)[:, None] / np.sqrt(2)
+        z = np.zeros((4, 1), dtype=complex)
+        assert sgcs(z, w) == 0.0
+        assert sgcs(w, z) == 0.0
+        assert sgcs(z, z) == 0.0
+
+    def test_nmse_zero_reference(self):
+        w = np.ones((4, 1), dtype=complex)
+        z = np.zeros((4, 1), dtype=complex)
+        assert nmse(z, w) == 0.0  # zero-reference columns are skipped, not inf
+        assert np.isclose(nmse(w, z), 1.0)
+
+    def test_su_rate_rank_deficient_precoder(self):
+        rng = np.random.default_rng(7)
+        H = rng.standard_normal((4, 2, CFG.P)) + 1j * rng.standard_normal((4, 2, CFG.P))
+        w = rng.standard_normal(CFG.P) + 1j * rng.standard_normal(CFG.P)
+        W = np.stack([w, w], axis=1) / np.linalg.norm(np.stack([w, w], axis=1))
+        rate = su_rate(H, W[None], 10.0)
+        assert np.isfinite(rate) and rate >= 0
+        # a duplicated column buys nothing over the single beam at equal power
+        w1 = w[:, None] / np.linalg.norm(w)
+        assert rate <= su_rate(H, w1[None], 10.0) + 1e-9
+
+    def test_mu_rate_single_user_equals_su_rate(self):
+        rng = np.random.default_rng(8)
+        H = rng.standard_normal((1, 3, 2, CFG.P)) + 1j * rng.standard_normal((1, 3, 2, CFG.P))
+        W = rng.standard_normal((1, 3, CFG.P, 2)) + 1j * rng.standard_normal((1, 3, CFG.P, 2))
+        W /= np.linalg.norm(W, axis=(-2, -1), keepdims=True)
+        assert np.isclose(mu_rate(H, W, 5.0)[0], su_rate(H[0], W[0], 5.0), atol=1e-9)
+
+
+class TestHarness:
+    def _channel(self, **kw):
+        from nr_csi.channel import RandomRayChannel
+
+        return RandomRayChannel(CFG, N3=4, n_rx=2, **kw)
+
+    def test_evaluate_r16_invariants(self):
+        from nr_csi.codebooks import R16Type2Codebook
+        from nr_csi.eval import evaluate
+
+        cbk = R16Type2Codebook(CFG, N3=4, param_combination=2)
+        res = evaluate(cbk, self._channel(), snr_db=[0.0, 10.0], rank=1,
+                       n_drops=5, rng=np.random.default_rng(0))
+        assert all(c <= u + 1e-9 for c, u in zip(res.se, res.se_upper_bound))
+        assert res.se[0] < res.se[1]
+        assert 0 < res.sgcs <= 1
+        assert len(res.per_drop_sgcs) == 5
+        assert res.overhead_bits > 0
+
+    def test_evaluate_r18_multi_slot(self):
+        """Harness-level R18 run (n_slots = N4), previously only hand-rolled
+        in codebook tests."""
+        from nr_csi.codebooks import R18Type2Codebook
+        from nr_csi.eval import evaluate
+
+        cbk = R18Type2Codebook(CFG, N3=4, N4=4, param_combination=5)
+        chan = self._channel(max_doppler=1.0, doppler_period=4)
+        res = evaluate(cbk, chan, snr_db=[10.0], rank=1, n_drops=4,
+                       n_slots=4, rng=np.random.default_rng(1))
+        assert all(c <= u + 1e-9 for c, u in zip(res.se, res.se_upper_bound))
+        assert 0 < res.sgcs <= 1
+
+    def test_evaluate_deterministic_with_seeded_rng(self):
+        from nr_csi.codebooks import R15Type2Codebook
+        from nr_csi.eval import evaluate
+
+        cbk = R15Type2Codebook(CFG, N3=4, L=2)
+        runs = [
+            evaluate(cbk, self._channel(), snr_db=[10.0], rank=1, n_drops=3,
+                     rng=np.random.default_rng(42))
+            for _ in range(2)
+        ]
+        assert runs[0].se == runs[1].se
+        assert runs[0].sgcs == runs[1].sgcs
+        assert runs[0].overhead_bits == runs[1].overhead_bits

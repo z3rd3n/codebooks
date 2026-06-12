@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..config import AntennaConfig
+from ..config import AntennaConfig, n3_for_bwp
 from .base import ChannelSource
+
+RE_PER_RB = 12  # subcarriers per resource block
 
 
 def _import_sionna():
@@ -39,7 +41,7 @@ class SionnaCDLChannel(ChannelSource):
     def __init__(
         self,
         antenna: AntennaConfig,
-        N3: int,
+        N3: int | None = None,
         model: str = "A",
         carrier_frequency: float = 3.5e9,
         delay_spread: float = 100e-9,
@@ -48,11 +50,39 @@ class SionnaCDLChannel(ChannelSource):
         fft_size: int = 256,
         subcarrier_spacing: float = 30e3,
         interval_duration: float = 0.5e-3,
+        n_rb: int | None = None,
+        subband_size: int | None = None,
+        R: int = 1,
     ) -> None:
+        """Either give ``N3`` directly (the grid is split into N3 equal
+        chunks), or give the BWP size ``n_rb`` and a ``subband_size`` from
+        Table tabCSS: then N3 = ceil(n_rb / subband_size) * R and each PMI
+        frequency unit averages the subcarriers of its RB-aligned subband
+        (the last one may be short)."""
         CDL, Antenna, PanelArray, cir_to_ofdm, subc_freq = _import_sionna()
         self._cir_to_ofdm = cir_to_ofdm
         self.antenna = antenna
-        self.N3 = N3
+        if n_rb is not None:
+            if subband_size is None:
+                raise ValueError("subband_size is required together with n_rb")
+            if n_rb * RE_PER_RB > fft_size:
+                raise ValueError(
+                    f"{n_rb} RB = {n_rb * RE_PER_RB} subcarriers exceed fft_size={fft_size}"
+                )
+            self.N3 = n3_for_bwp(n_rb, subband_size, R)
+            n_sb = self.N3 // R
+            # subcarrier slice per PMI unit; R units share one CQI subband
+            edges = [min(i * subband_size * RE_PER_RB, n_rb * RE_PER_RB)
+                     for i in range(n_sb + 1)]
+            self._unit_slices = [
+                slice(edges[i], edges[i + 1]) for i in range(n_sb) for _ in range(R)
+            ]
+        elif N3 is not None:
+            self.N3 = N3
+            sc = fft_size // N3
+            self._unit_slices = [slice(i * sc, (i + 1) * sc) for i in range(N3)]
+        else:
+            raise ValueError("give either N3 or (n_rb, subband_size)")
         self.n_rx = n_rx
         self.n_ports = antenna.P
         self.fft_size = fft_size
@@ -86,6 +116,7 @@ class SionnaCDLChannel(ChannelSource):
             min_speed=speed,
             max_speed=speed,
         )
+        self.bs_array = bs_array
         self._port_perm = self._port_permutation(bs_array)
 
     def _port_permutation(self, bs_array) -> np.ndarray:
@@ -117,7 +148,6 @@ class SionnaCDLChannel(ChannelSource):
         h = np.asarray(h)[0, 0, :, 0, :, :, :]  # (rx_ant, tx_ant, time, sc)
         h = h[:, self._port_perm]  # our port ordering
         # average the subcarriers of each PMI frequency unit
-        sc_per_unit = self.fft_size // self.N3
-        h = h[..., : sc_per_unit * self.N3]
-        h = h.reshape(self.n_rx, self.antenna.P, n_slots, self.N3, sc_per_unit).mean(axis=-1)
+        units = [h[..., s].mean(axis=-1) for s in self._unit_slices]
+        h = np.stack(units, axis=-1)  # (rx, port, time, N3)
         return h.transpose(2, 3, 0, 1)  # (slot, t, rx, port)

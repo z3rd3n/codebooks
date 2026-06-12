@@ -1,11 +1,10 @@
 """R17 FeType II anchors: free port selection, M/alpha combos, R15-PS comparison."""
 
 import numpy as np
-import pytest
 
-from nr_csi.codebooks.fetype2_r17 import R17Type2Codebook, R17Type2PMI
+from nr_csi.codebooks.fetype2_r17 import R17Type2Codebook
 from nr_csi.codebooks.type2_r15 import R15Type2Codebook
-from nr_csi.config import AntennaConfig, R17_PARAM_COMBOS
+from nr_csi.config import AntennaConfig
 from nr_csi.metrics import sgcs
 from nr_csi.utils import combinatorics as cb
 

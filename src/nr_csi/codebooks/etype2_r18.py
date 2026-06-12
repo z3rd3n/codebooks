@@ -28,7 +28,7 @@ from math import comb
 
 import numpy as np
 
-from ..config import AntennaConfig, R18_PARAM_COMBOS, m_v
+from ..config import R18_PARAM_COMBOS, AntennaConfig, m_v
 from ..utils import combinatorics as cb
 from ..utils import dft
 from ..utils import quantization as qt
@@ -87,6 +87,7 @@ class R18Type2Codebook(CodebookScheme):
         N4: int = 4,
         param_combination: int = 3,
         R: int = 1,
+        ri_restriction: np.ndarray | None = None,
     ) -> None:
         if N4 not in (1, 2, 4, 8):
             raise ValueError("N4 must be in {1, 2, 4, 8}")
@@ -97,6 +98,22 @@ class R18Type2Codebook(CodebookScheme):
         self.combo = R18_PARAM_COMBOS[param_combination]
         self.L = self.combo.L
         self.Q = 1 if N4 == 1 else 2  # protocol freezes Q = 2 (1 when N4 = 1)
+        if self.L > antenna.n_ports_per_pol:
+            raise ValueError(
+                f"L={self.L} beams cannot be drawn from an orthogonal group of "
+                f"N1*N2={antenna.n_ports_per_pol} beams"
+            )
+        if N3 < 1:
+            raise ValueError("N3 must be positive")
+        if ri_restriction is None:
+            ri_restriction = np.ones(4, dtype=bool)
+        self.ri_restriction = np.asarray(ri_restriction, dtype=bool)
+        if self.ri_restriction.shape != (4,):
+            raise ValueError("typeII-Doppler-RI-Restriction-r18 must have 4 bits [r0..r3]")
+        for v in (1, 2, 3, 4):  # fail at construction, not first use
+            if v >= 3 and self.combo.p_v34 is None:
+                continue
+            self.Mv(v)
 
     def Mv(self, rank: int) -> int:
         val = m_v(self.combo.p_v(rank), self.N3, self.R)
@@ -129,6 +146,9 @@ class R18Type2Codebook(CodebookScheme):
         return x * p1[pol][:, None, None]
 
     def precoder(self, pmi: R18Type2PMI) -> np.ndarray:
+        from .validate import validate_r18
+
+        validate_r18(self, pmi)
         a = self.antenna
         Mv = self.Mv(pmi.rank)
         B = self._basis(pmi)
@@ -152,9 +172,15 @@ class R18Type2Codebook(CodebookScheme):
     def select(self, H: np.ndarray, rank: int = 1) -> R18Type2PMI:
         if not 1 <= rank <= 4:
             raise ValueError("R18 eType II supports ranks 1-4")
+        if not self.ri_restriction[rank - 1]:
+            raise ValueError(
+                f"rank {rank} prohibited by typeII-Doppler-RI-Restriction-r18 (r{rank - 1}=0)"
+            )
         H = np.asarray(H)
         if H.shape[0] != self.N4:
             raise ValueError(f"channel must cover the N4={self.N4} slot intervals")
+        if H.shape[1] != self.N3:
+            raise ValueError(f"channel has {H.shape[1]} frequency units, expected {self.N3}")
         Mv = self.Mv(rank)
         L2 = 2 * self.L
 

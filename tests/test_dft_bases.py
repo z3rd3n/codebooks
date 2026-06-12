@@ -43,7 +43,9 @@ def test_kronecker_structure(cfg):
     v = dft.spatial_beam(cfg, m1, m2)
     for k1 in range(cfg.N1):
         for k2 in range(cfg.N2):
-            expected = np.exp(2j * np.pi * (m1 * k1 / (cfg.O1 * cfg.N1) + m2 * k2 / (cfg.O2 * cfg.N2)))
+            expected = np.exp(
+                2j * np.pi * (m1 * k1 / (cfg.O1 * cfg.N1) + m2 * k2 / (cfg.O2 * cfg.N2))
+            )
             assert np.isclose(v[k1 * cfg.N2 + k2], expected)
 
 
