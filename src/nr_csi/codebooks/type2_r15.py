@@ -68,6 +68,11 @@ class R15Type2Codebook(CodebookScheme):
     ) -> None:
         if L not in (2, 3, 4):
             raise ValueError("numberOfBeams L must be in {2,3,4}")
+        if L > antenna.n_ports_per_pol:
+            raise ValueError(
+                f"L={L} beams cannot be drawn from an orthogonal group of "
+                f"N1*N2={antenna.n_ports_per_pol} beams"
+            )
         if n_psk not in (4, 8):
             raise ValueError("phaseAlphabetSize must be 4 or 8")
         self.antenna = antenna
@@ -136,6 +141,9 @@ class R15Type2Codebook(CodebookScheme):
     # ------------------------------------------------------------------
 
     def precoder(self, pmi: R15Type2PMI) -> np.ndarray:
+        from .validate import validate_r15
+
+        validate_r15(self, pmi)
         a = self.antenna
         B = self._basis(pmi)  # (L, P/2)
         W = np.zeros((1, self.N3, a.P, pmi.rank), dtype=complex)
@@ -162,6 +170,8 @@ class R15Type2Codebook(CodebookScheme):
         from ..baselines.ideal import eigen_precoder
 
         H = np.asarray(H)[-1]  # (N3, Nr, P)
+        if H.shape[0] != self.N3:
+            raise ValueError(f"channel has {H.shape[0]} frequency units, expected {self.N3}")
         targets = eigen_precoder(H, rank=rank) * np.sqrt(rank)  # (N3, P, v) unit columns
 
         pmi = R15Type2PMI(rank=rank)

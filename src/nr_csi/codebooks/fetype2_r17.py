@@ -65,6 +65,10 @@ class R17Type2Codebook(CodebookScheme):
         K1 = self.alpha * antenna.P
         if K1 % 2 != 0 or K1 <= 0:
             raise ValueError(f"alpha*P_CSI-RS = {K1} must be a positive even integer")
+        if K1 > antenna.P:
+            raise ValueError(f"K1 = alpha*P = {K1} exceeds the {antenna.P} CSI-RS ports")
+        if N3 < 1:
+            raise ValueError("N3 must be positive")
         self.K1 = int(K1)
         self.L = self.K1 // 2
         if N_window not in (2, 4):
@@ -103,6 +107,9 @@ class R17Type2Codebook(CodebookScheme):
         return x * p1[pol][:, None]
 
     def precoder(self, pmi: R17Type2PMI) -> np.ndarray:
+        from .validate import validate_r17
+
+        validate_r17(self, pmi)
         a = self.antenna
         B = self._basis(pmi)
         Y = dft.freq_basis(self.N3, np.array(self.taps(pmi))).T  # (N3, M)
@@ -122,6 +129,8 @@ class R17Type2Codebook(CodebookScheme):
         if not 1 <= rank <= 4:
             raise ValueError("R17 FeType II supports ranks 1-4")
         H = np.asarray(H)[-1]
+        if H.shape[0] != self.N3:
+            raise ValueError(f"channel has {H.shape[0]} frequency units, expected {self.N3}")
         targets = _spatial.aligned_eigen_targets(H, rank)
         a = self.antenna
         half = a.P // 2

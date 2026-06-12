@@ -97,6 +97,17 @@ class R18Type2Codebook(CodebookScheme):
         self.combo = R18_PARAM_COMBOS[param_combination]
         self.L = self.combo.L
         self.Q = 1 if N4 == 1 else 2  # protocol freezes Q = 2 (1 when N4 = 1)
+        if self.L > antenna.n_ports_per_pol:
+            raise ValueError(
+                f"L={self.L} beams cannot be drawn from an orthogonal group of "
+                f"N1*N2={antenna.n_ports_per_pol} beams"
+            )
+        if N3 < 1:
+            raise ValueError("N3 must be positive")
+        for v in (1, 2, 3, 4):  # fail at construction, not first use
+            if v >= 3 and self.combo.p_v34 is None:
+                continue
+            self.Mv(v)
 
     def Mv(self, rank: int) -> int:
         val = m_v(self.combo.p_v(rank), self.N3, self.R)
@@ -129,6 +140,9 @@ class R18Type2Codebook(CodebookScheme):
         return x * p1[pol][:, None, None]
 
     def precoder(self, pmi: R18Type2PMI) -> np.ndarray:
+        from .validate import validate_r18
+
+        validate_r18(self, pmi)
         a = self.antenna
         Mv = self.Mv(pmi.rank)
         B = self._basis(pmi)
@@ -155,6 +169,8 @@ class R18Type2Codebook(CodebookScheme):
         H = np.asarray(H)
         if H.shape[0] != self.N4:
             raise ValueError(f"channel must cover the N4={self.N4} slot intervals")
+        if H.shape[1] != self.N3:
+            raise ValueError(f"channel has {H.shape[1]} frequency units, expected {self.N3}")
         Mv = self.Mv(rank)
         L2 = 2 * self.L
 

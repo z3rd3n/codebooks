@@ -116,7 +116,18 @@ class R16Type2Codebook(CodebookScheme):
         self.port_selection = port_selection
         if port_selection and not (1 <= d <= 4 and d <= min(antenna.P // 2, self.L)):
             raise ValueError("portSelectionSamplingSize d must satisfy d<=min(P/2,L), d in 1..4")
+        if not port_selection and self.L > antenna.n_ports_per_pol:
+            raise ValueError(
+                f"L={self.L} beams cannot be drawn from an orthogonal group of "
+                f"N1*N2={antenna.n_ports_per_pol} beams"
+            )
         self.d = d
+        if N3 < 1:
+            raise ValueError("N3 must be positive")
+        for v in (1, 2, 3, 4):  # fail at construction, not first use
+            if v >= 3 and self.combo.p_v34 is None:
+                continue
+            self.Mv(v)
         self.name = "R16 eType II PS" if port_selection else "R16 eType II"
 
     # -- derived parameters ------------------------------------------------
@@ -152,6 +163,9 @@ class R16Type2Codebook(CodebookScheme):
         return x * p1[pol][:, None]
 
     def precoder(self, pmi: R16Type2PMI) -> np.ndarray:
+        from .validate import validate_r16
+
+        validate_r16(self, pmi)
         a = self.antenna
         Mv = self.Mv(pmi.rank)
         B = self._basis(pmi)  # (L, P/2)
@@ -173,6 +187,8 @@ class R16Type2Codebook(CodebookScheme):
         if not 1 <= rank <= 4:
             raise ValueError("R16 eType II supports ranks 1-4")
         H = np.asarray(H)[-1]
+        if H.shape[0] != self.N3:
+            raise ValueError(f"channel has {H.shape[0]} frequency units, expected {self.N3}")
         targets = _spatial.aligned_eigen_targets(H, rank)
         Mv = self.Mv(rank)
 
