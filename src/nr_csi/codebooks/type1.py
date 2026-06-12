@@ -112,6 +112,9 @@ class Type1Codebook(CodebookScheme):
     # -- gNB side ----------------------------------------------------------
 
     def precoder(self, pmi: Type1PMI) -> np.ndarray:
+        from .validate import validate_type1
+
+        validate_type1(self, pmi)
         a = self.antenna
         W = np.empty((1, self.N3, a.P, pmi.rank), dtype=complex)
         offsets = i13_offsets(a.N1, a.N2, a.O1, a.O2) if pmi.rank == 2 else None
