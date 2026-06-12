@@ -26,7 +26,7 @@ from math import comb
 
 import numpy as np
 
-from ..config import AntennaConfig, R17_PARAM_COMBOS
+from ..config import R17_PARAM_COMBOS, AntennaConfig
 from ..utils import combinatorics as cb
 from ..utils import dft
 from ..utils import quantization as qt

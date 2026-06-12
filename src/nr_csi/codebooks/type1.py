@@ -62,6 +62,7 @@ class Type1Codebook(CodebookScheme):
         N3: int = 1,
         mode: int = 1,
         beam_restriction: np.ndarray | None = None,
+        rank_restriction: np.ndarray | None = None,
         selection_snr_db: float = 10.0,
     ) -> None:
         if mode not in (1, 2):
@@ -77,6 +78,11 @@ class Type1Codebook(CodebookScheme):
         self.beam_restriction = np.asarray(beam_restriction, dtype=bool)
         if self.beam_restriction.shape != (n_bits,):
             raise ValueError(f"beam restriction bitmap must have {n_bits} bits")
+        if rank_restriction is None:
+            rank_restriction = np.ones(8, dtype=bool)
+        self.rank_restriction = np.asarray(rank_restriction, dtype=bool)
+        if self.rank_restriction.shape != (8,):
+            raise ValueError("rank restriction r = [r0..r7] must have 8 bits")
         self.selection_rho = 10 ** (selection_snr_db / 10)
 
     # -- helpers -----------------------------------------------------------
@@ -132,6 +138,10 @@ class Type1Codebook(CodebookScheme):
     def select(self, H: np.ndarray, rank: int = 1) -> Type1PMI:
         if rank not in (1, 2):
             raise ValueError("Type I implementation supports ranks 1-2")
+        if not self.rank_restriction[rank - 1]:
+            raise ValueError(
+                f"rank {rank} prohibited by typeI-SinglePanel-ri-Restriction (r{rank - 1}=0)"
+            )
         H = np.asarray(H)
         if H.ndim != 4:
             raise ValueError("H must be [slot, t, rx, port]")

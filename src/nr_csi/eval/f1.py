@@ -44,7 +44,9 @@ def multipath_channel(
         2 * n_paths
     )
     A = ula_steering(N, sin_aod)  # (n_paths, N)
-    rx = (rng.standard_normal((n_rx, n_paths)) + 1j * rng.standard_normal((n_rx, n_paths))) / np.sqrt(2)
+    rx = (
+        rng.standard_normal((n_rx, n_paths)) + 1j * rng.standard_normal((n_rx, n_paths))
+    ) / np.sqrt(2)
     if n_rx == 1:
         rx = np.ones((1, n_paths))
     return (rx * gains) @ A.conj()

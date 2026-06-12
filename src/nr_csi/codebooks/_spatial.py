@@ -42,10 +42,15 @@ def split_polarizations(targets: np.ndarray) -> np.ndarray:
 
 
 def select_group_and_beams(
-    antenna: AntennaConfig, targets: np.ndarray, L: int
+    antenna: AntennaConfig, targets: np.ndarray, L: int, allowed=None
 ) -> tuple[int, int, int]:
     """Pick (q1, q2, i12): the orthogonal group whose best L beams capture the
-    most target energy, and the combinatorial index of those beams."""
+    most target energy, and the combinatorial index of those beams.
+
+    ``allowed(q1, q2) -> (N1N2,) bool`` optionally masks prohibited beams
+    (codebook subset restriction); groups with fewer than L allowed beams
+    are skipped entirely.
+    """
     pols = split_polarizations(targets)
     best = (-1.0, None)
     for q1 in range(antenna.O1):
@@ -53,9 +58,16 @@ def select_group_and_beams(
             Bg = dft.orthogonal_group(antenna, q1, q2)  # (N1N2, P/2)
             proj = np.einsum("bp,nopv->nvob", Bg.conj(), pols)
             be = np.sum(np.abs(proj) ** 2, axis=(0, 1, 2))
+            if allowed is not None:
+                mask = np.asarray(allowed(q1, q2), dtype=bool)
+                if mask.sum() < L:
+                    continue
+                be = np.where(mask, be, -np.inf)
             e = float(np.sort(be)[::-1][:L].sum())
             if e > best[0]:
                 best = (e, (q1, q2, be))
+    if best[1] is None:
+        raise RuntimeError("no orthogonal group offers L allowed beams under the restriction")
     q1, q2, beam_energy = best[1]
     top = np.sort(np.argsort(beam_energy)[::-1][:L])
     n1 = [int(n % antenna.N1) for n in top]
