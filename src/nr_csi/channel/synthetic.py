@@ -73,3 +73,46 @@ class SyntheticRayChannel(ChannelSource):
             f_time = np.exp(2j * np.pi * s * ray.doppler / self.doppler_period)  # (n_slots,)
             H += ray.gain * np.einsum("s,t,r,p->strp", f_time, f_freq, a_rx, v_dual.conj())
         return H
+
+
+class RandomRayChannel(SyntheticRayChannel):
+    """Fresh random sparse rays per drop: the deterministic test channel
+    re-randomized so Monte-Carlo evaluation is meaningful.
+
+    ``max_delay``/``max_doppler`` bound the uniform draws (in DFT tap/shift
+    units); rays are off-grid in angle, delay, and Doppler in general.
+    """
+
+    def __init__(
+        self,
+        antenna: AntennaConfig,
+        N3: int = 1,
+        n_rx: int = 1,
+        n_paths: int = 4,
+        max_delay: float = 3.0,
+        max_doppler: float = 0.0,
+        doppler_period: int = 1,
+    ) -> None:
+        super().__init__(antenna, [], N3=N3, n_rx=n_rx, doppler_period=doppler_period)
+        self.n_paths = n_paths
+        self.max_delay = max_delay
+        self.max_doppler = max_doppler
+
+    def generate(self, n_slots: int = 1, rng: np.random.Generator | None = None) -> np.ndarray:
+        rng = rng or np.random.default_rng()
+        G1, G2 = self.antenna.n_beams
+        self.rays = [
+            Ray(
+                gain=(rng.standard_normal() + 1j * rng.standard_normal())
+                / np.sqrt(2 * self.n_paths),
+                m1=rng.uniform(0, G1),
+                m2=rng.uniform(0, G2),
+                delay=rng.uniform(0, self.max_delay),
+                doppler=rng.uniform(0, self.max_doppler),
+                pol_phase=rng.uniform(0, 2 * np.pi),
+                a_rx=(rng.standard_normal(self.n_rx) + 1j * rng.standard_normal(self.n_rx))
+                / np.sqrt(2),
+            )
+            for _ in range(self.n_paths)
+        ]
+        return super().generate(n_slots, rng)

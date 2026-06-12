@@ -157,3 +157,28 @@ class TestOverhead:
         bits = cb.overhead_bits(pmi)
         assert bits["i13"] == 2
         assert bits["i2"] == 4 * 1  # 1 bit per subband
+
+
+class TestCompactModel:
+    """Paper "Compact Model for R15 Type I": W == W_s @ w_PMI with
+    W_s = blockdiag(Vbar_s, Vbar_s) and w_PMI = blockdiag(e_lm, e_lm) [1; phi],
+    all scaled by 1/sqrt(P)."""
+
+    def test_rank1_equals_compact_model(self):
+        from nr_csi.codebooks.compact import dual_block
+        from nr_csi.utils import dft
+
+        cbk = Type1Codebook(CFG, N3=1)
+        for l, m, n in [(0, 0, 0), (5, 3, 1), (15, 7, 2), (9, 1, 3)]:
+            pmi = Type1PMI(rank=1, mode=1, i11=l, i12=m, i2=np.array([n]))
+            w_spec = cbk.precoder(pmi)[0, 0, :, 0]
+            # the beam (l, m) lives in orthogonal group (q1, q2) at flat
+            # position n = N1*n2 + n1 (the group's row ordering)
+            q1, n1 = l % CFG.O1, l // CFG.O1
+            q2, n2 = m % CFG.O2, m // CFG.O2
+            Ws = dual_block(dft.orthogonal_group(CFG, q1, q2))
+            e = np.zeros(CFG.N1 * CFG.N2)
+            e[CFG.N1 * n2 + n1] = 1.0
+            phi = np.exp(1j * np.pi * n / 2)
+            w_pmi = np.concatenate([e, phi * e]) / np.sqrt(CFG.P)
+            assert np.allclose(w_spec, Ws @ w_pmi)

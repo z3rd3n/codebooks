@@ -17,7 +17,7 @@ Run: .venv/bin/python scripts/compare_schemes.py
 import numpy as np
 
 from nr_csi.baselines import eigen_precoder
-from nr_csi.channel import Ray, SyntheticRayChannel
+from nr_csi.channel import RandomRayChannel
 from nr_csi.codebooks import (
     CodebookScheme,
     R15Type2Codebook,
@@ -49,33 +49,6 @@ class OracleSVDScheme(CodebookScheme):
 
     def overhead_bits(self, pmi):
         return {"latent": pmi.size * self.bits}
-
-
-class RandomRayChannel(SyntheticRayChannel):
-    """Fresh random sparse rays per drop (the deterministic test channel
-    re-randomized so Monte-Carlo evaluation is meaningful)."""
-
-    def __init__(self, antenna, N3, n_rx, n_paths=4):
-        super().__init__(antenna, [], N3=N3, n_rx=n_rx)
-        self.n_paths = n_paths
-
-    def generate(self, n_slots=1, rng=None):
-        rng = rng or np.random.default_rng()
-        G1, G2 = self.antenna.n_beams
-        self.rays = [
-            Ray(
-                gain=(rng.standard_normal() + 1j * rng.standard_normal())
-                / np.sqrt(2 * self.n_paths),
-                m1=rng.uniform(0, G1),
-                m2=rng.uniform(0, G2),
-                delay=rng.uniform(0, 3),
-                pol_phase=rng.uniform(0, 2 * np.pi),
-                a_rx=(rng.standard_normal(self.n_rx) + 1j * rng.standard_normal(self.n_rx))
-                / np.sqrt(2),
-            )
-            for _ in range(self.n_paths)
-        ]
-        return super().generate(n_slots, rng)
 
 
 def main() -> None:
