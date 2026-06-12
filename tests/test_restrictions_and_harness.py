@@ -192,6 +192,76 @@ class TestHarnessKnobs:
                        rng=np.random.default_rng(7), **kw)
         assert s18.sgcs > s16.sgcs
 
+    def test_measurement_slots_noiseless_noop(self):
+        """S3 knob, static + noiseless: a longer observation window changes
+        nothing (the time-average of identical slots is the slot)."""
+        cbk = R16Type2Codebook(ANT, N3=4, param_combination=6)
+        chan = RandomRayChannel(ANT, N3=4, n_rx=2)  # static drops
+        base = evaluate(cbk, chan, snr_db=[10.0], n_drops=6,
+                        rng=np.random.default_rng(11))
+        windowed = evaluate(cbk, chan, snr_db=[10.0], n_drops=6,
+                            measurement_slots=4, rng=np.random.default_rng(11))
+        assert windowed.sgcs == base.sgcs
+        assert windowed.se == base.se
+        assert windowed.overhead_bits == base.overhead_bits
+
+    def test_measurement_slots_averages_noise(self):
+        """S3 fairness knob: at low measurement SNR a 4-slot observation
+        window lets a single-interval scheme average the estimation noise --
+        the advantage R18's N4-slot window silently enjoyed."""
+        cbk = R16Type2Codebook(ANT, N3=4, param_combination=6)
+        chan = RandomRayChannel(ANT, N3=4, n_rx=2)
+        kw = dict(snr_db=[10.0], n_drops=10, measurement_snr_db=-5.0)
+        one = evaluate(cbk, chan, measurement_slots=1,
+                       rng=np.random.default_rng(12), **kw)
+        four = evaluate(cbk, chan, measurement_slots=4,
+                        rng=np.random.default_rng(12), **kw)
+        assert four.sgcs > one.sgcs + 0.02
+
+    def test_measurement_slots_validation(self):
+        r18 = R18Type2Codebook(ANT, N3=4, N4=4, param_combination=7)
+        with pytest.raises(ValueError, match="measurement_slots"):
+            evaluate(r18, self._mobile_channel(), snr_db=[10.0], n_drops=1,
+                     n_slots=4, measurement_slots=2)
+
+    def test_delay_aware_zero_delay_noop(self):
+        r18 = R18Type2Codebook(ANT, N3=4, N4=4, param_combination=7)
+        kw = dict(snr_db=[10.0], n_drops=4, n_slots=4)
+        a = evaluate(r18, self._mobile_channel(), delay_aware=True,
+                     rng=np.random.default_rng(13), **kw)
+        b = evaluate(r18, self._mobile_channel(), rng=np.random.default_rng(13), **kw)
+        assert a.sgcs == b.sgcs
+        assert a.se == b.se
+
+    def test_delay_aware_single_interval_noop(self):
+        cbk = R16Type2Codebook(ANT, N3=4, param_combination=6)
+        kw = dict(snr_db=[10.0], n_drops=6, feedback_delay_slots=2)
+        a = evaluate(cbk, self._mobile_channel(), delay_aware=True,
+                     rng=np.random.default_rng(14), **kw)
+        b = evaluate(cbk, self._mobile_channel(), rng=np.random.default_rng(14), **kw)
+        assert a.sgcs == b.sgcs
+        assert a.se == b.se
+
+    def test_delay_aware_recovers_r18_prediction(self):
+        """S4: a delay-aware gNB indexes the *predicted* interval d + j
+        instead of replaying interval j -- the harness now shows the
+        prediction gain fig_05's left panel showed by hand.  On-grid
+        Doppler, deterministic channel."""
+        from nr_csi.channel import Ray, SyntheticRayChannel
+
+        rays = [
+            Ray(gain=1.0, m1=4, m2=2, pol_phase=0.7),
+            Ray(gain=0.17, m1=8, m2=6, delay=1, doppler=1.0, pol_phase=2.1),
+        ]
+        chan = SyntheticRayChannel(ANT, rays, N3=4, n_rx=1, doppler_period=4)
+        r18 = R18Type2Codebook(ANT, N3=4, N4=4, param_combination=7)
+        kw = dict(snr_db=[10.0], n_drops=1, n_slots=4)
+        d0 = evaluate(r18, chan, feedback_delay_slots=0, **kw)
+        oblivious = evaluate(r18, chan, feedback_delay_slots=2, **kw)
+        aware = evaluate(r18, chan, feedback_delay_slots=2, delay_aware=True, **kw)
+        assert aware.sgcs > oblivious.sgcs + 0.05
+        assert aware.sgcs > d0.sgcs - 0.05
+
 
 class TestMuEvaluation:
     def test_zf_sum_rate_and_full_csi_gap(self):

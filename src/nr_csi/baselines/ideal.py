@@ -33,8 +33,14 @@ def mrt(H: np.ndarray) -> np.ndarray:
 
 
 def zf(H: np.ndarray) -> np.ndarray:
-    """Zero forcing: W = H^H (H H^H)^{-1}."""
-    return H.conj().T @ np.linalg.inv(H @ H.conj().T)
+    """Zero forcing: W = H^H (H H^H)^{-1}, computed as the right pseudo-inverse.
+
+    ``pinv`` is identical for full row rank but stays finite when rows are
+    colinear (e.g. two users reporting the same PMI direction): the colinear
+    users then share the minimum-norm direction and fully interfere -- the
+    physically right outcome -- instead of an ``inv`` blow-up.
+    """
+    return np.linalg.pinv(H)
 
 
 def rzf(H: np.ndarray, xi: float) -> np.ndarray:
@@ -109,12 +115,16 @@ def ezf(H_users: np.ndarray, n_streams: int = 1, xi: float = 0.0) -> np.ndarray:
     eigenvectors stacked and jointly (regularized) zero-forced.
 
     H_users: (K, Nr, Nt) -> W (Nt, K*n_streams), columns grouped per user.
+    At xi = 0 the pseudo-inverse keeps W finite even when users' dominant
+    eigendirections are colinear (cf. ``zf``).
     """
     vs = []
     for Hk in H_users:
         _, _, Vh = np.linalg.svd(Hk, full_matrices=False)
         vs.append(Vh.conj().T[:, :n_streams])
     V_eff = np.concatenate(vs, axis=1)  # (Nt, K*v)
+    if xi == 0:
+        return np.linalg.pinv(V_eff.conj().T)
     n = V_eff.shape[1]
     return V_eff @ np.linalg.inv(V_eff.conj().T @ V_eff + xi * np.eye(n))
 

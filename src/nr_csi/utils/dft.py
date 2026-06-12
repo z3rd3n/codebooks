@@ -58,6 +58,10 @@ def orthogonal_group(cfg: AntennaConfig, q1: int, q2: int) -> np.ndarray:
     """The N1*N2 orthogonal beams of group (q1, q2), shape (N1*N2 beams, N1*N2 ports).
 
     Row order: n = n2 * N1 + n1 (matching Algorithm 1's n1 = n mod N1 convention).
+
+    Warning: rows have norm sqrt(N1*N2), not 1 (unit-modulus entries) -- using
+    them directly as a beamforming basis scales channel power by N1*N2 and
+    inflates SE; use ``unitary_peb`` for a power-preserving basis.
     """
     beams = np.empty((cfg.N1 * cfg.N2, cfg.n_ports_per_pol), dtype=complex)
     for n in range(cfg.N1 * cfg.N2):
@@ -66,6 +70,13 @@ def orthogonal_group(cfg: AntennaConfig, q1: int, q2: int) -> np.ndarray:
         m1, m2 = cfg.O1 * n1 + q1, cfg.O2 * n2 + q2
         beams[n] = spatial_beam(cfg, m1, m2)
     return beams
+
+
+def unitary_peb(cfg: AntennaConfig, q1: int = 0, q2: int = 0) -> np.ndarray:
+    """Unitary full-connect PEB F (P/2 x P/2): ``orthogonal_group(...).T``
+    rescaled by 1/sqrt(N1*N2) so F^H F = I (power-preserving -- SE computed
+    in the beam domain equals the physical domain)."""
+    return orthogonal_group(cfg, q1, q2).T / np.sqrt(cfg.N1 * cfg.N2)
 
 
 def freq_basis(N3: int, n3: int | np.ndarray) -> np.ndarray:

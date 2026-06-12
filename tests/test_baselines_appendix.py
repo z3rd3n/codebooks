@@ -124,6 +124,45 @@ class TestWMMSE:
         assert r_w >= r_z - 1e-9
 
 
+class TestZFRobustness:
+    """S6: ``zf``/``ezf(xi=0)`` use the pseudo-inverse, so colinear reported
+    directions (two users picking the same PMI) degrade gracefully instead
+    of blowing up the Gram inverse."""
+
+    def test_pinv_matches_inv_when_well_conditioned(self):
+        rng = np.random.default_rng(20)
+        H = rand_channel(rng, 4, 8)
+        W_inv = H.conj().T @ np.linalg.inv(H @ H.conj().T)
+        assert np.allclose(zf(H), W_inv, rtol=1e-9, atol=1e-12)
+
+    def test_colinear_users_graceful(self):
+        rng = np.random.default_rng(21)
+        h = rand_channel(rng, 8)
+        W = zf(np.stack([h, h]))  # two users report the same direction
+        assert np.all(np.isfinite(W))
+        assert np.allclose(W[:, 0], W[:, 1])  # they share the direction
+        H_users = np.stack([h[None], h[None]])  # same dominant eigendirection
+        W2 = ezf(H_users, n_streams=1, xi=0.0)
+        assert np.all(np.isfinite(W2))
+        assert np.allclose(W2[:, 0], W2[:, 1])
+
+    def test_mu_eval_many_type1_users_completes(self):
+        """The original fig_06 crash repro: 8 Type I users frequently report
+        identical coarse directions; plain ZF must survive that."""
+        from nr_csi.channel import RandomRayChannel
+        from nr_csi.codebooks import Type1Codebook
+        from nr_csi.config import AntennaConfig
+        from nr_csi.eval import evaluate_mu
+
+        ant = AntennaConfig.standard(4, 2)
+        chan = RandomRayChannel(ant, N3=4, n_rx=1)
+        res = evaluate_mu(Type1Codebook(ant, N3=4), chan, n_users=8,
+                          snr_db=[10.0], n_drops=5,
+                          rng=np.random.default_rng(22), regularization=None)
+        assert np.all(np.isfinite(res.sum_rate))
+        assert res.sum_rate[0] > 0
+
+
 class TestPowerAllocation:
     def test_water_filling_constraints_and_ordering(self):
         gains = np.array([4.0, 1.0, 0.25])

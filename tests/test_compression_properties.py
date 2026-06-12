@@ -134,6 +134,24 @@ class TestMonotonicity:
         )
 
 
+class TestR18StaticBudget:
+    """S2 lock-in: the spec budget K0 = ceil(2*beta*L*M1*Q) doubles with the
+    Q = 2 Doppler components, and on a *static* channel the idle Doppler bin
+    donates its half of the budget to the DC bin.  So R18 at matched
+    (L, p_v, beta) is at least as accurate as R16 even with nothing to
+    predict -- at strictly larger overhead.  Spec-faithful behavior, not a
+    bug (see README notes; the K0 formula itself is locked in
+    test_etype2_r18.py)."""
+
+    def test_static_r18_at_least_matched_r16(self):
+        s16, b16 = mean_sgcs_and_bits(
+            R16Type2Codebook(ANT, N3=8, param_combination=6), n_drops=20, seed=30)
+        s18, b18 = mean_sgcs_and_bits(
+            R18Type2Codebook(ANT, N3=8, N4=4, param_combination=7), n_drops=20, seed=30)
+        assert s18 >= s16 - 0.005
+        assert b18 > b16
+
+
 class TestR18N4Sweep:
     def _horizon_sgcs(self, doppler, N4, horizon=8):
         """Mean SGCS over a fixed 8-slot horizon: one R18 report covering the

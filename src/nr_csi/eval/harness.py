@@ -16,7 +16,7 @@ from ..baselines.ideal import eigen_precoder
 from ..channel.base import ChannelSource
 from ..codebooks.base import CodebookScheme
 from ..metrics.se import su_rate
-from ..metrics.similarity import sgcs
+from ..metrics.similarity import sgcs, subspace_sgcs
 
 
 @dataclass
@@ -28,6 +28,7 @@ class EvalResult:
     sgcs: float  # mean SGCS vs per-interval eigen targets
     overhead_bits: float  # mean feedback bits per report
     per_drop_sgcs: list[float] = field(default_factory=list)
+    subspace_sgcs: float = 0.0  # rotation-invariant companion of sgcs
 
 
 def _add_measurement_noise(
@@ -49,6 +50,8 @@ def evaluate(
     rng: np.random.Generator | None = None,
     feedback_delay_slots: int = 0,
     measurement_snr_db: float | None = None,
+    measurement_slots: int | None = None,
+    delay_aware: bool = False,
 ) -> EvalResult:
     """Monte-Carlo evaluation of one scheme over channel drops.
 
@@ -62,27 +65,52 @@ def evaluate(
       the future (CSI aging -- this is what the R18 codebook compensates).
     * ``measurement_snr_db``: complex Gaussian estimation noise added to the
       channel the scheme sees; scoring still uses the true channel.
+    * ``measurement_slots``: the UE observes this many consecutive intervals
+      ending at the report instant (default ``n_slots``).  Multi-interval
+      schemes consume the most recent ``n_slots`` of the (noisy) observation;
+      single-interval schemes its time-average -- a longer CSI-RS observation,
+      so noise averaging is a level playing field with R18's N4-slot window.
+      Static + noiseless => identical to the default for any value.
+    * ``delay_aware``: the gNB applies the report knowing its age -- scoring
+      interval ``j`` uses the predicted interval ``feedback_delay_slots + j``
+      (clamped to the last reported interval) instead of interval ``j``.
+      No-op for single-interval reports or zero delay.
     """
     rng = rng or np.random.default_rng(0)
     snr_db = list(np.atleast_1d(snr_db))
     rhos = [10 ** (s / 10) for s in snr_db]
+    m = n_slots if measurement_slots is None else measurement_slots
+    if m < n_slots:
+        raise ValueError(f"measurement_slots {m} < n_slots {n_slots}")
     se = np.zeros(len(rhos))
     se_ub = np.zeros(len(rhos))
     sgcs_vals = []
+    subspace_vals = []
     bits = []
     for _ in range(n_drops):
-        H_full = channel.generate(n_slots=n_slots + feedback_delay_slots, rng=rng)
-        H_meas = H_full[:n_slots]  # (S, N3, Nr, P)
+        total = m + feedback_delay_slots
+        H_full = channel.generate(n_slots=total, rng=rng)
+        H_meas = H_full[:m]  # UE observation, (m, N3, Nr, P)
         if measurement_snr_db is not None:
             H_meas = _add_measurement_noise(H_meas, measurement_snr_db, rng)
-        H = H_full[feedback_delay_slots:]  # scoring window
-        pmi = scheme.select(H_meas, rank=rank)
+        H_in = H_meas[m - n_slots:] if n_slots > 1 else H_meas.mean(0, keepdims=True)
+        H = H_full[total - n_slots:]  # scoring window
+        pmi = scheme.select(H_in, rank=rank)
         W = scheme.precoder(pmi)  # (S_out, N3, P, v)
         S_out = W.shape[0]
-        # non-Doppler schemes report once; replicate across intervals
-        W_all = W if S_out == H.shape[0] else np.repeat(W[-1:], H.shape[0], axis=0)
+        if delay_aware:
+            # report interval s is absolute slot (m - n_slots) + s, scoring
+            # index j absolute slot (m - n_slots) + feedback_delay_slots + j
+            idx = np.minimum(np.arange(H.shape[0]) + feedback_delay_slots, S_out - 1)
+            W_all = W[idx]
+        elif S_out == H.shape[0]:
+            W_all = W
+        else:
+            # non-Doppler schemes report once; replicate across intervals
+            W_all = np.repeat(W[-1:], H.shape[0], axis=0)
         W_ref = eigen_precoder(H, rank=rank)
         sgcs_vals.append(sgcs(W_ref, W_all))
+        subspace_vals.append(subspace_sgcs(W_ref, W_all))
         bits.append(scheme.total_overhead_bits(pmi))
         for i, rho in enumerate(rhos):
             se[i] += su_rate(H, W_all, rho)
@@ -95,6 +123,7 @@ def evaluate(
         sgcs=float(np.mean(sgcs_vals)),
         overhead_bits=float(np.mean(bits)),
         per_drop_sgcs=[float(x) for x in sgcs_vals],
+        subspace_sgcs=float(np.mean(subspace_vals)),
     )
 
 

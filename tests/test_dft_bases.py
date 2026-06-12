@@ -77,6 +77,18 @@ def test_spatial_grid_matches_single_beam(cfg):
     assert np.allclose(grid[G1 - 1, G2 - 1], dft.spatial_beam(cfg, G1 - 1, G2 - 1))
 
 
+@pytest.mark.parametrize("shape", [(4, 2), (8, 1)])
+def test_unitary_peb_is_unitary(shape):
+    """S7: unlike raw ``orthogonal_group`` rows (norm sqrt(N1*N2)), the PEB
+    helper is power-preserving: F^H F = I."""
+    c = AntennaConfig.standard(*shape)
+    F = dft.unitary_peb(c)
+    n = c.n_ports_per_pol
+    assert F.shape == (n, n)
+    assert np.allclose(F.conj().T @ F, np.eye(n), atol=1e-12)
+    assert np.allclose(F @ F.conj().T, np.eye(n), atol=1e-12)
+
+
 @pytest.mark.parametrize("N,basis", [(12, dft.freq_basis), (8, dft.time_basis)])
 def test_freq_time_bases_are_dft(N, basis):
     F = basis(N, np.arange(N))  # (N, N) full basis

@@ -56,6 +56,16 @@ class TestF2Claims:
         for series in (r15, r16, r18):
             assert all(b > a for a, b in zip(series, series[1:]))  # grows with L
 
+    def test_l1_inversion_r16_exceeds_r15(self):
+        """S8 lock-in: at L = 1 the Table bit1/bit2 formulas make R16 cost
+        MORE than R15 -- R16's fixed machinery (i16 tap-combination index,
+        K_NZ coefficient payload) is not amortized by a single beam.  The
+        paper's Fig. f2 bars show the opposite ordering, which is not
+        derivable from its own bit tables (erratum 4 territory; see README
+        errata)."""
+        data = f2_comparison(F2_ANT)
+        assert data["R16 Regular"][0] > data["R15 Regular"][0]
+
     def test_r15_gap_grows_with_subband_count(self):
         """Per-subband reporting is R15's cost driver; FD compression decouples
         R16 from N3 (up to the tap-combination index)."""

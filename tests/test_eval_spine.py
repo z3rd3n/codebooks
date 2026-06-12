@@ -5,7 +5,7 @@ import numpy as np
 from nr_csi.baselines import eigen_precoder, mmse, zf
 from nr_csi.channel import Ray, SyntheticRayChannel
 from nr_csi.config import AntennaConfig
-from nr_csi.metrics import mu_rate, nmse, sgcs, su_rate
+from nr_csi.metrics import mu_rate, nmse, sgcs, su_rate, subspace_sgcs
 from nr_csi.utils import dft
 
 CFG = AntennaConfig.standard(4, 2)  # P = 16
@@ -107,6 +107,61 @@ class TestSimilarity:
         w1 = np.array([1, 0], dtype=complex)[:, None]
         w2 = np.array([0, 1], dtype=complex)[:, None]
         assert np.isclose(nmse(w1, w2), 2.0)  # orthogonal unit vectors
+
+
+class TestSubspaceSGCS:
+    def _rand(self, rng, *shape):
+        return rng.standard_normal(shape) + 1j * rng.standard_normal(shape)
+
+    def test_rank1_equals_sgcs(self):
+        rng = np.random.default_rng(10)
+        w_ref = self._rand(rng, 3, 8, 1)
+        w_hat = self._rand(rng, 3, 8, 1)
+        assert np.isclose(subspace_sgcs(w_ref, w_hat), sgcs(w_ref, w_hat))
+
+    def test_right_unitary_invariance(self):
+        rng = np.random.default_rng(11)
+        W_ref = self._rand(rng, 8, 2)
+        W_hat = self._rand(rng, 8, 2)
+        U = np.linalg.qr(self._rand(rng, 2, 2))[0]
+        assert np.isclose(subspace_sgcs(W_ref, W_hat @ U), subspace_sgcs(W_ref, W_hat))
+        # the column-wise SGCS is NOT invariant in general (that is the point)
+        assert not np.isclose(sgcs(W_ref, W_hat @ U), sgcs(W_ref, W_hat))
+
+    def test_at_least_columnwise_sgcs(self):
+        rng = np.random.default_rng(12)
+        for _ in range(20):
+            W_ref = self._rand(rng, 8, 2)
+            W_hat = self._rand(rng, 8, 2)
+            assert subspace_sgcs(W_ref, W_hat) >= sgcs(W_ref, W_hat) - 1e-12
+
+    def test_zero_precoder_is_zero(self):
+        rng = np.random.default_rng(13)
+        w = self._rand(rng, 8, 2)
+        z = np.zeros((8, 2), dtype=complex)
+        assert subspace_sgcs(w, z) == 0.0
+        # a degenerate (duplicated-column) precoder spans only one direction:
+        # the masked second QR column must not capture extra energy
+        dup = np.stack([w[:, 0], w[:, 0]], axis=1)
+        assert np.isclose(subspace_sgcs(w, dup), subspace_sgcs(w, w[:, :1]))
+
+    def test_type1_rank2_subspace_gap(self):
+        """S1 regression: Type I's rigid rank-2 pair spans a decent subspace
+        but cannot rotate within it; the column-wise SGCS punishes that
+        rotation while the subspace metric does not."""
+        from nr_csi.channel import RandomRayChannel
+        from nr_csi.codebooks import Type1Codebook
+
+        chan = RandomRayChannel(CFG, N3=4, n_rx=2)
+        cbk = Type1Codebook(CFG, N3=4)
+        rng = np.random.default_rng(0)
+        gaps = []
+        for _ in range(5):
+            H = chan.generate(n_slots=1, rng=rng)
+            W = cbk.precoder(cbk.select(H, rank=2))
+            W_ref = eigen_precoder(H, rank=2)
+            gaps.append(subspace_sgcs(W_ref, W) - sgcs(W_ref, W))
+        assert np.mean(gaps) >= 0.1
 
 
 class TestMetricEdgeCases:
