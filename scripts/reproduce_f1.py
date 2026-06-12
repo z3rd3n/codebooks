@@ -13,7 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nr_csi.eval.f1 import run_f1_case
+from nr_csi.eval.f1 import F1_REPRODUCTION, run_f1_case
 
 OUT = pathlib.Path(__file__).resolve().parent.parent / "results"
 
@@ -30,7 +30,12 @@ def main() -> None:
               "type1": (":", "Type I")}
     colors = ["#0072BD", "#D95319", "#77AC30"]
     for (N, ns, label), color in zip(cases, colors):
-        cv = run_f1_case(N, ns, snr, n_drops=400, seed=42)
+        cv = run_f1_case(
+            N, ns, snr, n_drops=400, seed=42,
+            n_paths=F1_REPRODUCTION["n_paths"],
+            n_psk=F1_REPRODUCTION["n_psk"],
+            t1_second_beam=F1_REPRODUCTION["t1_second_beam"],
+        )
         for attr, (ls, name) in styles.items():
             ax.plot(snr, getattr(cv, attr), ls, color=color,
                     label=f"{label}: {name}")
