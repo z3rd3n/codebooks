@@ -31,6 +31,26 @@ compact matrix/Tucker models); `select` is one reasonable UE algorithm
 (eigen targets → orthogonal-group/beam selection → FFT tap/shift selection →
 spec quantization), since the UE side is not standardized.
 
+Also implemented:
+
+* **Bit-level serialization** (`nr_csi.codebooks.pack/unpack`): the actual
+  feedback bitstream; `len(pack(pmi)) == total_overhead_bits(pmi)` and
+  `unpack(pack(pmi)) == pmi` are asserted for every configuration, so the
+  overhead numbers used in comparisons are honest.
+* **Runtime PMI validation** (`codebooks/validate.py`): every `precoder()`
+  rejects malformed reports (shapes, index ranges, strongest-coefficient
+  conventions).
+* **Codebook subset restriction** (`TypeIIRestriction`, paper eqs. a58/a59 +
+  Table tabmaxap): restricted beams are never selected; wideband amplitudes
+  are capped. Rank restriction bitmaps for Type I (8-bit `r`) and R18
+  (4-bit `typeII-Doppler-RI-Restriction-r18`).
+* **Evaluation harness extras** (`nr_csi.eval`): `feedback_delay_slots`
+  (CSI aging) and `measurement_snr_db` (estimation noise) knobs on
+  `evaluate`, plus `evaluate_mu` for MU-MIMO ZF/RZF sum rates from reported
+  PMIs (paper eq. 2) against a full-CSI reference.
+* **Table tabCSS wiring**: `nr_csi.config.n3_for_bwp(n_rb, subband_size, R)`
+  and BWP-driven subband mapping in `SionnaCDLChannel(n_rb=..., subband_size=...)`.
+
 ## Install & test
 
 ```bash
@@ -40,6 +60,8 @@ pytest -m "not slow and not sionna"   # spec-level unit suite (fast)
 pytest -m slow                        # Fig. f1 statistical reproduction
 pip install -e ".[sionna]"            # optional: TensorFlow + Sionna
 pytest -m sionna                      # 38.901 CDL end-to-end integration
+scripts/check.sh                      # lint (ruff) + fast + slow suites
+scripts/check.sh --with-sionna --cov  # everything, with coverage
 ```
 
 ## Reproducing the paper's figures
@@ -104,9 +126,15 @@ CSI metric — and NMSE (`metrics.similarity`), feedback bits
    8-PSK (3 bits); configurable in `eval.f1`.
 3. **Fig. f1 channel** is unspecified; we use a sparse multipath ULA channel
    normalized so E‖h‖² = N, which matches the figure's upper-bound curve.
-   The paper's 2-stream Type I procedure is also unspecified; we restrict the
-   second beam to the spec's i₁,₃ offsets (Table tabmap), which brackets the
-   paper's curve from below (an unrestricted search brackets it from above).
+   The paper's 2-stream Type I procedure is also unspecified: the spec's
+   i₁,₃ offsets (Table tabmap) bracket the paper's curve from below, an
+   unrestricted second-beam search from above. A least-squares calibration
+   against the digitized figure (`eval.f1.calibrate_f1`) selected 8 paths
+   with the unrestricted variant (`eval.f1.F1_REPRODUCTION`); all 63
+   digitized points then reproduce within max(±0.6 b/s/Hz, ±8%)
+   (`tests/test_f1_paper_values.py`). Known residual: the paper's N=4
+   single-stream Type I curve sits closer to Type II (~0.15 b/s/Hz) than
+   spec-faithful selection allows (~0.5) on every channel family swept.
 4. **Fig. f2 absolute bar values are not derivable from the paper's own
    Tables bit1/bit2** with the stated parameters (the bars imply an R15/R16
    ratio ≈17× at L=4; the table formulas give ≈3× under any consistent

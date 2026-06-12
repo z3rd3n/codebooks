@@ -1,7 +1,6 @@
 """Anchors for the synthetic channel, ideal baselines, and SE/SGCS metrics."""
 
 import numpy as np
-import pytest
 
 from nr_csi.baselines import eigen_precoder, mmse, zf
 from nr_csi.channel import Ray, SyntheticRayChannel

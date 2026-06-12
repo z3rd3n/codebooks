@@ -79,7 +79,9 @@ def encode_restriction_groups(r1: list[int], r2: list[int], O1: int, O2: int) ->
     return combo_to_index(g, O1 * O2)
 
 
-def decode_restriction_groups(beta1: int, O1: int, O2: int) -> tuple[list[int], list[int], list[int]]:
+def decode_restriction_groups(
+    beta1: int, O1: int, O2: int
+) -> tuple[list[int], list[int], list[int]]:
     """beta_1 -> (g^(k), r1^(k), r2^(k)) per Algorithm 2."""
     g = index_to_combo(beta1, O1 * O2, 4)
     r1 = [x % O1 for x in g]

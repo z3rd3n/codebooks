@@ -37,7 +37,6 @@ def _check_array(arr, name: str, shape: tuple[int, ...], lo: int, hi: int) -> No
 def validate_type1(cbk, pmi) -> None:
     a = cbk.antenna
     G1, G2 = a.n_beams
-    div = 2 if pmi.mode == 1 else 1  # mode 2 halves the wideband grid
     _check(pmi.rank in (1, 2), f"rank {pmi.rank} not in 1..2")
     _check(pmi.mode == cbk.mode, f"mode {pmi.mode} != configured {cbk.mode}")
     n11 = G1 if pmi.mode == 1 else G1 // 2

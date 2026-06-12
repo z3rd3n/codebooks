@@ -10,7 +10,6 @@ i110; R16 N3<=19 drops i15; R15 SA=false drops i22).
 """
 
 import numpy as np
-import pytest
 
 from nr_csi.codebooks import (
     R15Type2Codebook,

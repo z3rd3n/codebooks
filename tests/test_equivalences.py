@@ -2,10 +2,9 @@
 paper states between codebook generations."""
 
 import numpy as np
-import pytest
 
 from nr_csi.baselines.ideal import eigen_precoder
-from nr_csi.channel import RandomRayChannel, Ray, SyntheticRayChannel
+from nr_csi.channel import Ray, SyntheticRayChannel
 from nr_csi.codebooks import (
     R15Type2Codebook,
     R16Type2Codebook,

@@ -132,3 +132,24 @@ def test_r18_tracks_mobility_better_than_held_r16():
         s18_all.append(np.mean([sgcs(targets[i], W18[i]) for i in range(N4)]))
         s16_all.append(np.mean([sgcs(targets[i], W16[0]) for i in range(N4)]))
     assert np.mean(s18_all) > np.mean(s16_all)
+
+
+def test_tabcss_wired_subband_mapping():
+    """BWP-driven grid mapping: 26 RB with subband size 8 -> N3 = 4 PMI
+    units, RB-aligned (the last subband is short: 2 RB)."""
+    chan = SionnaCDLChannel(ANT, model="A", n_rx=1, n_rb=26, subband_size=8,
+                            fft_size=512)
+    assert chan.N3 == 4
+    slices = chan._unit_slices
+    assert [s.start for s in slices] == [0, 96, 192, 288]
+    assert slices[-1].stop == 26 * 12
+    H = chan.generate(n_slots=1)
+    assert H.shape == (1, 4, 1, ANT.P)
+    assert np.all(np.isfinite(H))
+
+
+def test_tabcss_rejects_invalid_combination():
+    with pytest.raises(ValueError):
+        SionnaCDLChannel(ANT, model="A", n_rb=100, subband_size=4, fft_size=2048)
+    with pytest.raises(ValueError):  # 273 RB do not fit a 256-point grid
+        SionnaCDLChannel(ANT, model="A", n_rb=273, subband_size=16)
