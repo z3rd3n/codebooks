@@ -96,9 +96,16 @@ python scripts/fig_02_rate_distortion.py --drops 200 --seed 1   # any one figure
 | `fig_07_rank_adaptation` | fixed ranks 1–4 vs auto-RI, rank distribution vs SNR |
 | `fig_08_channel_sensitivity` | robustness to channel sparsity and estimation noise |
 | `fig_09_port_selection` | regular vs PS codebooks on antenna- vs beam-domain channels |
-| `fig_10_array_scaling` | SE / SGCS / bits vs array size (P = 8…32) |
+| `fig_10_array_scaling` | SE / gap-to-bound / SGCS / bits vs array size (P = 8…32, all families + (16,1) aspect contrast) |
 | `fig_11_frequency_granularity` | fidelity and cost vs N₃: per-subband (R15) vs M_v-tap (R16) reporting |
-| `fig_12_summary` | normalized radar scorecard + raw-numbers table (`results/fig_12_summary.md`) |
+| `fig_12_summary` | normalized radar scorecard + raw-numbers table (`results/fig_12_summary_table.md`) |
+
+Every figure has a hand-written analysis next to it
+(`results/<figure>.md`): what it shows, the mechanism behind each trend,
+and investigations of the initially surprising results (Type I's rank-2
+SGCS collapse, the R18 K₀ = ⌈2βLM₁Q⌉ static-channel budget bonus, R17's
+fidelity *rising* with P, the windowed-PS vs free-PS gap, the measurement-
+noise ranking inversion, the L = 1 overhead inversion in f2).
 
 ## Comparing your ML CSI algorithm
 
