@@ -87,20 +87,41 @@ class BeamDomainChannel(ChannelSource):
     used here is the full orthogonal DFT group, which is unitary per
     polarization, so SE, SGCS, and the eigen upper bound computed in this
     domain equal their physical-domain values exactly.
+
+    ``sort_by_energy``: per-drop permutation of the beam ports by descending
+    energy -- a stand-in for a gNB that tunes its PEB to the user (S5): the
+    R15/R16 PS codebooks can only window *consecutive* ports, so DFT-PEB
+    energy on non-adjacent ports defeats them unless the gNB reorders.  A
+    permutation is unitary, so comparability is preserved.
     """
 
-    def __init__(self, inner: ChannelSource, antenna: AntennaConfig) -> None:
+    def __init__(
+        self,
+        inner: ChannelSource,
+        antenna: AntennaConfig,
+        sort_by_energy: bool = False,
+    ) -> None:
         self.inner = inner
-        # orthogonal_group rows have norm sqrt(N1*N2); rescale so F is
-        # unitary and the PEB preserves channel power (honest SE numbers).
-        self.F = dft.orthogonal_group(antenna, 0, 0).T / np.sqrt(antenna.n_ports_per_pol)
+        self.F = dft.unitary_peb(antenna)  # power-preserving (honest SE numbers)
         self.half = antenna.P // 2
+        self.sort_by_energy = sort_by_energy
 
     def generate(self, n_slots: int = 1, rng: np.random.Generator | None = None):
         H = self.inner.generate(n_slots=n_slots, rng=rng)
-        return np.concatenate(
+        H = np.concatenate(
             [H[..., : self.half] @ self.F, H[..., self.half :] @ self.F], axis=-1
         )
+        if self.sort_by_energy:
+            # beam-port energy summed over slots/frequency/rx and BOTH
+            # polarization halves; applying the SAME permutation to each half
+            # preserves the dual-pol structure
+            e = np.abs(H[..., : self.half]) ** 2 + np.abs(H[..., self.half :]) ** 2
+            order = np.argsort(-e.sum(axis=tuple(range(e.ndim - 1))))
+            H = np.concatenate(
+                [H[..., : self.half][..., order], H[..., self.half :][..., order]],
+                axis=-1,
+            )
+        return H
 
 
 def run_eval(

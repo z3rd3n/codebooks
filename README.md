@@ -45,9 +45,13 @@ Also implemented:
   are capped. Rank restriction bitmaps for Type I (8-bit `r`) and R18
   (4-bit `typeII-Doppler-RI-Restriction-r18`).
 * **Evaluation harness extras** (`nr_csi.eval`): `feedback_delay_slots`
-  (CSI aging) and `measurement_snr_db` (estimation noise) knobs on
-  `evaluate`, plus `evaluate_mu` for MU-MIMO ZF/RZF sum rates from reported
-  PMIs (paper eq. 2) against a full-CSI reference.
+  (CSI aging), `measurement_snr_db` (estimation noise), `measurement_slots`
+  (UE observation window — the fair counterpart of R18's N₄-slot
+  measurement) and `delay_aware` (the gNB applies the *predicted* interval
+  d+j instead of replaying interval j) knobs on `evaluate`, plus
+  `evaluate_mu` for MU-MIMO ZF/RZF sum rates from reported PMIs (paper
+  eq. 2) against a full-CSI reference. ZF baselines are pseudo-inverse
+  based, so colinear reported directions degrade gracefully.
 * **Table tabCSS wiring**: `nr_csi.config.n3_for_bwp(n_rb, subband_size, R)`
   and BWP-driven subband mapping in `SionnaCDLChannel(n_rb=..., subband_size=...)`.
 
@@ -138,7 +142,12 @@ for scheme in [R16Type2Codebook(ant, N3=8, param_combination=4), MyMLScheme()]:
 
 Metrics: spectral efficiency (`metrics.se`), SGCS — the standard 3GPP AI/ML
 CSI metric — and NMSE (`metrics.similarity`), feedback bits
-(`metrics.overhead` + per-scheme `overhead_bits`).
+(`metrics.overhead` + per-scheme `overhead_bits`). At rank > 1 also read
+`EvalResult.subspace_sgcs` (`metrics.subspace_sgcs`): the rotation-invariant
+fraction of the reference subspace captured. Column-wise SGCS additionally
+penalizes rotations *within* the reported span that do not affect the
+log-det rate — Type I's rigid rank-2 pair scores 0.26 column-wise but
+spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
 
 ## Conventions
 
@@ -177,11 +186,24 @@ CSI metric — and NMSE (`metrics.similarity`), feedback bits
    accounting). `metrics.overhead` implements the table formulas; the
    qualitative claims (R15 ≫ R16 > R18 for L≥2, equal growth in L, gap
    growing with N₃/N₄) hold and are asserted in `tests/test_overhead.py`.
+   A further consequence: at **L = 1 the table formulas invert the
+   ordering** — R16 costs 744 bits vs R15's 488 at the f2 configuration,
+   because R16's fixed machinery (i₁,₆ tap-combination index, K_NZ
+   coefficient payload) is not amortized by a single beam — while the
+   figure's bars show R16 below R15 everywhere. Locked in
+   `tests/test_overhead.py::TestF2Claims::test_l1_inversion_r16_exceeds_r15`.
 5. **R16 PS parameter table** (TS 38.214 Table 5.2.2.2.6-1) is referenced but
    not transcribed in the paper; the regular `paramCombination-r16` table is
    reused for the PS variant here.
 6. Type I ranks 3–8 need TS 38.214 tables that the paper does not include;
    they are out of scope (extension hooks in `codebooks/type1.py`).
+7. **R18's coefficient budget K₀ = ⌈2βLM₁Q⌉ carries the Q = 2 Doppler
+   factor** (spec-faithful, not a bug): on a *static* channel the idle
+   Doppler bin donates its half of the budget to the DC bin, so R18 at
+   matched (L, p_v, β) is at least as accurate as R16 with nothing to
+   predict — at strictly larger overhead. Expect R18 ≥ R16 in static
+   comparisons (fig_08/fig_10); locked in
+   `tests/test_compression_properties.py::TestR18StaticBudget`.
 
 ## Traceability matrix (paper → code → test)
 

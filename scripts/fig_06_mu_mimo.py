@@ -7,6 +7,10 @@ the same ZF to the true eigenvectors, so the gap is pure feedback
 quantization loss -- the regime Type II exists for (Type I's coarse
 direction makes ZF leak).
 
+Plain ZF (``regularization=None``) throughout: since S6 the baseline uses
+the pseudo-inverse, so colinear reported directions (the old crash at many
+Type I users) degrade gracefully and the epsilon-RZF workaround is gone.
+
 * left: sum rate vs SNR at K = 4 users;
 * right: sum rate vs number of users at 15 dB.
 
@@ -32,10 +36,6 @@ from nr_csi.eval import evaluate_mu
 SNR_DB = [-5.0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0]
 SNR_REF = 15.0
 USERS = [2, 3, 4, 6, 8]
-# Two users can report the *same* coarse direction (Type I especially),
-# making plain ZF singular; an epsilon-RZF equals ZF for separated users
-# and degrades gracefully (full mutual interference) for colinear reports.
-EPS_REG = 1e-6
 
 
 def schemes():
@@ -51,9 +51,12 @@ def run(scheme, domain, n_users, snr_db, args):
     chan = default_channel()
     if domain == "beam":
         chan = BeamDomainChannel(chan, ANT)
+    # plain ZF: baselines.zf is pinv-based (S6), so two users reporting the
+    # *same* coarse direction (Type I especially) degrade gracefully (they
+    # share the direction and fully interfere) instead of crashing
     return evaluate_mu(scheme, chan, n_users=n_users, snr_db=snr_db,
                        n_drops=args.drops, rng=np.random.default_rng(args.seed),
-                       regularization=EPS_REG)
+                       regularization=None)
 
 
 def main() -> None:

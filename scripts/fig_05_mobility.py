@@ -8,7 +8,9 @@ Doppler-spread channel (off-grid Doppler up to one DFT shift over an
   future interval (held beyond its window);
 * right: harness-level CSI aging -- mean SGCS when the report is applied
   ``feedback_delay_slots`` intervals late (the `evaluate` knob), standard
-  scheme set.
+  scheme set, plus a dotted "R18 ... (delay-aware)" curve where the gNB
+  indexes the predicted interval d + j instead of replaying interval j
+  (``delay_aware=True``) -- the prediction gain the left panel shows by hand.
 
 Together with fig_04's right panel (bits to cover N4 intervals) this is
 the R18 trade: prediction fidelity at a fraction of the re-reporting cost.
@@ -59,6 +61,16 @@ def aging_sgcs(args, delays: list[int]) -> dict[str, list[float]]:
                            rank=1, n_drops=args.drops, feedback_delay_slots=d)
             ys.append(res.sgcs)
         out[scheme.name] = ys
+        if scheme.name.startswith("R18"):
+            # delay-aware gNB: apply the *predicted* interval d + j instead of
+            # replaying interval j -- the harness-level view of the prediction
+            # gain the left panel shows by hand (S4)
+            out[scheme.name + " (delay-aware)"] = [
+                run_eval(scheme, chan, domain, seed=args.seed, snr_db=[10.0],
+                         rank=1, n_drops=args.drops, feedback_delay_slots=d,
+                         delay_aware=True).sgcs
+                for d in delays
+            ]
     return out
 
 
@@ -82,7 +94,10 @@ def main() -> None:
     axes[0].grid(alpha=0.3)
 
     for name, ys in aging.items():
-        axes[1].plot(delays, ys, label=name, **style(name))
+        st = style(name)
+        if "delay-aware" in name:
+            st["linestyle"] = ":"
+        axes[1].plot(delays, ys, label=name, **st)
     axes[1].set_xlabel("feedback delay (slot intervals)")
     axes[1].set_ylabel("mean SGCS over the scoring window")
     axes[1].set_title("CSI aging: report applied late (harness knob)")

@@ -43,6 +43,9 @@ def main() -> None:
             **{name: r.se for name, r in results.items()},
             "eigen upper bound": ub,
             "sgcs": {name: r.sgcs for name, r in results.items()},
+            # rotation-invariant subspace metric: at rank 2 the gap to sgcs
+            # is the rotation-within-the-span penalty (Type I especially)
+            "subspace_sgcs": {name: r.subspace_sgcs for name, r in results.items()},
             "overhead_bits": {name: r.overhead_bits for name, r in results.items()},
         }
 

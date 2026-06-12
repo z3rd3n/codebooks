@@ -6,7 +6,10 @@
   codebooks degrade -- at different rates.
 * right: SGCS vs measurement SNR (complex Gaussian estimation noise added
   to the channel the UE sees, harness ``measurement_snr_db`` knob; scoring
-  always uses the true channel).
+  always uses the true channel).  R18's apparent noise robustness is its
+  N4 = 4 observation slots (iid noise averages out); the dashed
+  "R16 eType II (4-slot meas.)" curve gives R16 the same observation
+  window via ``measurement_slots=4`` (S3) -- the fair comparison.
 
 Standard scheme set, rank 1.
 
@@ -36,6 +39,7 @@ def main() -> None:
         data["vs_paths"][scheme.name] = ys
 
     chan_kwargs = dict(n_paths=4)
+    xs = [m if m is not None else 25.0 for m in MEAS_SNR_DB]
     for scheme, domain in standard_schemes():
         ys = []
         for m in MEAS_SNR_DB:
@@ -43,10 +47,23 @@ def main() -> None:
                            snr_db=[10.0], rank=1, n_drops=args.drops,
                            measurement_snr_db=m)
             ys.append(res.sgcs)
-        xs = [m if m is not None else 25.0 for m in MEAS_SNR_DB]
         label = scheme.name + (" (via PEB)" if domain == "beam" else "")
         axes[1].plot(xs, ys, label=label, **style(scheme.name))
         data["vs_meas_snr"][scheme.name] = ys
+
+    # fairness check (S3): give R16 the same 4-slot observation window R18
+    # silently enjoys -- its single report then averages the noise too
+    r16 = next(s for s, _ in standard_schemes() if s.name == "R16 eType II")
+    ys = []
+    for m in MEAS_SNR_DB:
+        res = run_eval(r16, default_channel(**chan_kwargs), "antenna", seed=args.seed,
+                       snr_db=[10.0], rank=1, n_drops=args.drops,
+                       measurement_snr_db=m, measurement_slots=4)
+        ys.append(res.sgcs)
+    st = style(r16.name)
+    st["linestyle"] = "--"
+    axes[1].plot(xs, ys, label="R16 eType II (4-slot meas.)", **st)
+    data["vs_meas_snr"]["R16 eType II (4-slot meas.)"] = ys
 
     axes[0].set_xlabel("number of multipath rays")
     axes[0].set_ylabel("mean SGCS")

@@ -34,6 +34,14 @@ deployment assumptions: delay-aware (left) vs delay-oblivious (right).
 Type I barely ages (0.642 → 0.629) — a wideband beam is too coarse to
 notice phase drift — and R17 ages like the other held Type II reports.
 
+**Fix landed (S4).** `evaluate(..., delay_aware=True)` implements the
+delay-aware gNB described above: scoring interval j applies the *predicted*
+interval d + j (clamped to the report's last interval). The right panel now
+carries a dotted "R18 … (delay-aware)" curve sitting clearly above the
+oblivious one (0.840 vs 0.797 at d = 3, 0.69 vs 0.64 at d = 6) — the
+prediction gain the left panel showed by hand, now harness-level. Locked in
+`tests/test_restrictions_and_harness.py::TestHarnessKnobs::test_delay_aware_recovers_r18_prediction`.
+
 **Config.** `scripts/fig_05_mobility.py`, 60 drops, rank 1,
 max_doppler = 1 shift over an 8-interval period. Pair with fig_04's right
 panel for the bits side of the trade: R18's flat horizon costs one report.

@@ -37,5 +37,12 @@ power split, so SE survives; column-wise SGCS — the 3GPP metric — punishes
 the misrotation. Takeaway: for rank > 1, compare schemes on SE *and* SGCS;
 SGCS alone overstates Type I's rank-2 deficit.
 
+**Fix landed (S1).** The harness now reports a rotation-invariant
+`subspace_sgcs` alongside SGCS (`nr_csi.metrics.subspace_sgcs`, stored in
+this figure's JSON next to `sgcs`): at rank 2 it reads 0.52 for Type I
+(vs 0.26 column-wise) — the rotation-within-the-span penalty made
+explicit. Locked in
+`tests/test_eval_spine.py::TestSubspaceSGCS::test_type1_rank2_subspace_gap`.
+
 **Config.** `scripts/fig_01_se_vs_snr.py`, 100 drops, paired seeds; upper
 bound taken from the Type I run (identical drops for all 1-slot schemes).

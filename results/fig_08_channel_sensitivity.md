@@ -37,5 +37,14 @@ implicitly averages ~4× the observations. Probe: at −5 dB, R16 given the
 same 4-slot average scores 0.79 vs 0.46 from one slot — the gain is the
 longer measurement window, available to any scheme that observes 4 slots.
 
+**Fix landed (S3).** The probe is now a harness knob:
+`evaluate(..., measurement_slots=m)` gives any scheme an m-slot observation
+window ending at the report instant (single-interval schemes time-average
+it; static + noiseless is a bit-for-bit no-op). The right panel carries a
+dashed "R16 eType II (4-slot meas.)" curve — with the window matched, R16
+scores 0.54/0.78 at −10/−5 dB and *beats* R18 (0.32/0.61), confirming the
+lead was the observation window, not the codebook. Locked in
+`tests/test_restrictions_and_harness.py::TestHarnessKnobs`.
+
 **Config.** `scripts/fig_08_channel_sensitivity.py`, 60 drops; right panel
 at 4 rays, rightmost x-position = noiseless.
