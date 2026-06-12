@@ -76,18 +76,33 @@ def main() -> None:
 
     fig, ax = plt.subplots(figsize=(11, 5))
     names = list(breakdown)
+    axis_max = max(sum(d.values()) for d in breakdown.values())
+    min_inline = 0.028 * axis_max  # narrower segments get a callout above the bar
+    min_gap = 0.036 * axis_max  # horizontal spacing between callout labels
     for y, name in enumerate(names):
         left = 0
+        callout_x = -np.inf
         for elem, bits in breakdown[name].items():
             group, color = GROUPS.get(elem, ("other", "0.6"))
             ax.barh(y, bits, left=left, color=color, edgecolor="white", height=0.62)
-            if bits > 0.04 * sum(breakdown[name].values()):
-                ax.text(left + bits / 2, y, f"{elem}\n{bits}", ha="center",
+            center = left + bits / 2
+            if bits >= min_inline:
+                ax.text(center, y, f"{elem}\n{bits}", ha="center",
                         va="center", fontsize=7)
+            elif bits > 0:
+                # too narrow on the shared axis to label inline: callout above
+                # the bar, greedily pushed right so adjacent narrow segments
+                # don't print on top of each other
+                callout_x = max(center, callout_x + min_gap)
+                ax.plot([center, callout_x], [y - 0.32, y - 0.42],
+                        lw=0.6, color="0.45")
+                ax.text(callout_x, y - 0.44, f"{elem}\n{bits}", ha="center",
+                        va="bottom", fontsize=6, color="0.25")
             left += bits
-        ax.text(left * 1.01, y, f"{left} b", va="center", fontsize=9, fontweight="bold")
+        ax.text(left + 0.008 * axis_max, y, f"{left} b", va="center", fontsize=9,
+                fontweight="bold")
     ax.set_yticks(range(len(names)), names)
-    ax.invert_yaxis()
+    ax.set_ylim(len(names) - 0.45, -0.85)  # inverted y, headroom for the callouts
     ax.set_xlabel("feedback bits per report (per element)")
     handles = []
     for group, color in dict(
