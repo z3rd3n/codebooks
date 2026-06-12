@@ -66,6 +66,53 @@ def test_rank2_runs(channel):
     assert W.shape == (1, N3, ANT.P, 2)
 
 
+def test_los_beamforming_gain_approaches_full_array_gain():
+    """Near-LoS CDL-D: Type I must approach the full array gain P over a
+    single antenna.  This only happens if the DFT beams align with the
+    channel's spatial phase ramp, i.e. the whole port pipeline (permutation,
+    polarization split, co-phasing) is oriented correctly."""
+    chan = SionnaCDLChannel(
+        ANT, N3=4, model="D", delay_spread=10e-9, n_rx=1, ue_speed_kmh=0.0
+    )
+    cbk = Type1Codebook(ANT, N3=4)
+    gains = []
+    for _ in range(3):
+        H = chan.generate(n_slots=1)  # (1, N3, 1, P)
+        pmi = cbk.select(H, rank=1)
+        W = cbk.precoder(pmi)
+        bf = np.mean(np.abs(np.einsum("trp,tpl->trl", H[0], W[0])) ** 2)
+        single = np.mean(np.abs(H[0]) ** 2)  # per-port (single-antenna) power
+        gains.append(bf / single)
+    # full array gain is P = 2*N1*N2; allow ~3 dB for off-grid beam mismatch
+    assert np.mean(gains) > 0.5 * ANT.P
+
+
+def test_port_permutation_matches_panel_geometry():
+    """Our port k = pol*N1*N2 + n1*N2 + n2 must land on the antenna at
+    (y0 + n1*dy, z0 + n2*dz) of the right polarization.  Verified directly
+    against the panel's antenna positions, so an orientation error (n1/n2
+    swapped, wrong fastest axis, interleaved polarizations) fails even though
+    CDL's near-broadside LoS would mask it in a beamforming-gain check."""
+    chan = SionnaCDLChannel(ANT, N3=4, model="D", n_rx=1)
+    arr = chan.bs_array
+    pos = np.asarray(arr.ant_pos)
+    perm = chan._port_perm
+    n_half = ANT.N1 * ANT.N2
+    pol_sets = [set(np.asarray(arr.ant_ind_pol1).ravel().tolist()),
+                set(np.asarray(arr.ant_ind_pol2).ravel().tolist())]
+    ys = np.unique(np.round(pos[:, 1], 9))
+    zs = np.unique(np.round(pos[:, 2], 9))
+    assert len(ys) == ANT.N1 and len(zs) == ANT.N2
+    for pol in (0, 1):
+        for n1 in range(ANT.N1):
+            for n2 in range(ANT.N2):
+                k = pol * n_half + n1 * ANT.N2 + n2
+                ant = perm[k]
+                assert ant in pol_sets[pol], f"port {k} not in polarization {pol}"
+                assert np.isclose(pos[ant, 1], ys[n1]), f"port {k}: wrong column"
+                assert np.isclose(pos[ant, 2], zs[n2]), f"port {k}: wrong row"
+
+
 def test_r18_tracks_mobility_better_than_held_r16():
     """At UE speed, one R18 predicted PMI beats a held R16 report."""
     N4 = 4

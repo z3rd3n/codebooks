@@ -82,6 +82,59 @@ class TestF2Claims:
                 prev = ratio
 
 
+class TestF2GoldenValues:
+    """Frozen per-element bit values for the paper's f2 configuration
+    ((16,1), v=2, N3=18, Mv=5, K_NZ=20, N_PSK=4, K2=6, Q=2, N4=4), every
+    L in {1..4}.  Locks the Table bit1/bit2 formulas against regressions."""
+
+    R15_GOLDEN = {
+        1: {"i11": 2, "i12": 4, "i13": 2, "i14": 6, "i21": 72, "i22": 36},
+        2: {"i11": 2, "i12": 7, "i13": 4, "i14": 18, "i21": 216, "i22": 108},
+        3: {"i11": 2, "i12": 10, "i13": 6, "i14": 30, "i21": 360, "i22": 180},
+        4: {"i11": 2, "i12": 11, "i13": 6, "i14": 42, "i21": 504, "i22": 180},
+    }
+    R16_GOLDEN = {
+        1: {"i11": 2, "i12": 4, "i16": 24, "i17": 20, "i18": 2,
+            "i23": 8, "i24": 54, "i25": 72},
+        2: {"i11": 2, "i12": 7, "i16": 24, "i17": 40, "i18": 4,
+            "i23": 8, "i24": 54, "i25": 72},
+        3: {"i11": 2, "i12": 10, "i16": 24, "i17": 60, "i18": 6,
+            "i23": 8, "i24": 54, "i25": 72},
+        4: {"i11": 2, "i12": 11, "i16": 24, "i17": 80, "i18": 6,
+            "i23": 8, "i24": 54, "i25": 72},
+    }
+    R18_GOLDEN = {
+        1: {"i11": 2, "i12": 4, "i16": 24, "i17": 40, "i18": 4, "i110": 4,
+            "i23": 8, "i24": 54, "i25": 72},
+        2: {"i11": 2, "i12": 7, "i16": 24, "i17": 80, "i18": 6, "i110": 4,
+            "i23": 8, "i24": 54, "i25": 72},
+        3: {"i11": 2, "i12": 10, "i16": 24, "i17": 120, "i18": 8, "i110": 4,
+            "i23": 8, "i24": 54, "i25": 72},
+        4: {"i11": 2, "i12": 11, "i16": 24, "i17": 160, "i18": 8, "i110": 4,
+            "i23": 8, "i24": 54, "i25": 72},
+    }
+
+    @pytest.mark.parametrize("L", [1, 2, 3, 4])
+    def test_r15_golden(self, L):
+        assert r15_bits(F2_ANT, L=L, v=2, N3=18, n_psk=4, K2=6) == self.R15_GOLDEN[L]
+
+    @pytest.mark.parametrize("L", [1, 2, 3, 4])
+    def test_r16_golden(self, L):
+        assert r16_bits(F2_ANT, L=L, v=2, N3=18, Mv=5, K_nz=20) == self.R16_GOLDEN[L]
+
+    @pytest.mark.parametrize("L", [1, 2, 3, 4])
+    def test_r18_golden(self, L):
+        got = r18_bits(F2_ANT, L=L, v=2, N3=18, Mv=5, Q=2, N4=4, K_nz=20)
+        assert got == self.R18_GOLDEN[L]
+
+    def test_r15_paper_worked_example(self):
+        """The L=4 column the paper walks through: i21 = 2*18*14, i22 = 2*18*5."""
+        bits = self.R15_GOLDEN[4]
+        assert bits["i21"] == 2 * 18 * 14
+        assert bits["i22"] == 2 * 18 * 5
+        assert bits["i14"] == 2 * 3 * 7
+
+
 class TestNominalMatchesCodebookClasses:
     """The pure-formula module and the codebook classes must agree."""
 
