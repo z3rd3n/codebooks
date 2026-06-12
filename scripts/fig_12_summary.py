@@ -10,8 +10,9 @@ Five normalized axes (min-max over the five families; 1 = best here):
   Doppler (R18 predicts, the others hold)
 
 The radar shows the *shape* of each trade; the raw numbers are written to
-results/fig_12_summary.md (markdown) and .json -- quantifying the paper's
-qualitative comparison table.
+results/fig_12_summary_table.md (markdown) and .json -- quantifying the
+paper's qualitative comparison table.  (fig_12_summary.md holds the
+hand-written analysis of the figure.)
 
 Run: python scripts/fig_12_summary.py -> results/fig_12_summary.png
 """
@@ -104,7 +105,7 @@ def main() -> None:
                      + " | ".join(f"{raw[n][c]:.3f}" if c != "bits" else f"{raw[n][c]:.0f}"
                                   for c in cols) + " |")
     md = "\n".join(lines) + "\n"
-    (args.out / "fig_12_summary.md").write_text(md)
+    (args.out / "fig_12_summary_table.md").write_text(md)
     print(md)
 
 
