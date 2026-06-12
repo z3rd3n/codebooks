@@ -86,6 +86,7 @@ class SionnaCDLChannel(ChannelSource):
             min_speed=speed,
             max_speed=speed,
         )
+        self.bs_array = bs_array
         self._port_perm = self._port_permutation(bs_array)
 
     def _port_permutation(self, bs_array) -> np.ndarray:
