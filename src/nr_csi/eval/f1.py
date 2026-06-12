@@ -57,20 +57,28 @@ def dft_grid(N: int, O: int) -> np.ndarray:
     return np.exp(2j * np.pi * np.outer(idx, k) / (N * O)) / np.sqrt(N)
 
 
-def type1_precoder(H: np.ndarray, grid: np.ndarray, n_streams: int) -> np.ndarray:
-    """Best beam(s) of the grid by received power ||H w||^2; greedy for 2 streams."""
+def type1_precoder(
+    H: np.ndarray, grid: np.ndarray, n_streams: int, second_beam: str = "tabmap"
+) -> np.ndarray:
+    """Best beam(s) of the grid by received power ||H w||^2; greedy for 2 streams.
+
+    second_beam: "tabmap" restricts the second beam to the i_{1,3} offsets
+    {O, 2O, 3O} of Table tabmap (spec-faithful); "free" searches the whole
+    grid (brackets the paper's unspecified 2-stream procedure from above).
+    """
     energy = np.sum(np.abs(H @ grid.T) ** 2, axis=0)  # w = grid[i], not conjugated
     if n_streams == 1:
         return grid[int(np.argmax(energy))][:, None]
     first = int(np.argmax(energy))
-    # rank-2 Type I: the second beam is restricted to the i_{1,3} offsets
-    # {O, 2O, 3O} of Table tabmap (N2=1 row); choose by the joint rate metric
     n_beams = grid.shape[0]
     O = n_beams // (grid.shape[1])
     rho = 100.0
+    if second_beam == "tabmap":
+        candidates = [(first + k * O) % n_beams for k in (1, 2, 3)]
+    else:
+        candidates = [i for i in range(n_beams) if i != first]
     best = (-np.inf, None)
-    for k in (1, 2, 3):
-        i = (first + k * O) % n_beams
+    for i in candidates:
         W = np.stack([grid[first], grid[i]], axis=1) / np.sqrt(2)
         G = (H @ W).conj().T @ (H @ W)
         metric = np.log2(np.linalg.det(np.eye(2) + rho * G).real)
@@ -140,6 +148,7 @@ def run_f1_case(
     L: int = 4,
     n_psk: int = 8,
     seed: int = 0,
+    t1_second_beam: str = "tabmap",
 ) -> F1Curves:
     rng = np.random.default_rng(seed)
     rhos = 10 ** (snr_db / 10)
@@ -150,7 +159,7 @@ def run_f1_case(
         H = multipath_channel(N, n_rx, n_paths, rng)
         U, S, Vh = np.linalg.svd(H, full_matrices=False)
         W_ub = Vh.conj().T[:, :n_streams] / np.sqrt(n_streams)
-        W_t1 = type1_precoder(H, grid, n_streams)
+        W_t1 = type1_precoder(H, grid, n_streams, t1_second_beam)
         W_t2 = type2_precoder(H, N, O, L, n_streams, n_psk)
         for i, rho in enumerate(rhos):
             for key, W in (("ub", W_ub), ("t1", W_t1), ("t2", W_t2)):
@@ -164,3 +173,76 @@ def run_f1_case(
         type1=acc["t1"] / n_drops,
         type2=acc["t2"] / n_drops,
     )
+
+
+# ---------------------------------------------------------------------------
+# Digitized reference values and channel calibration
+# ---------------------------------------------------------------------------
+
+F1_SNR_DB = np.array([0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0])
+
+#: Curves digitized from paper/pictures/f1.pdf (reading error about +-0.1
+#: b/s/Hz).  Keys: (N, n_streams) -> {"ub" | "t2" | "t1": values at F1_SNR_DB}.
+F1_DIGITIZED: dict[tuple[int, int], dict[str, list[float]]] = {
+    (4, 1): {
+        "ub": [2.45, 3.95, 5.40, 6.90, 8.65, 10.35, 12.05],
+        "t2": [2.40, 3.90, 5.35, 6.85, 8.60, 10.30, 12.00],
+        "t1": [2.25, 3.60, 5.15, 6.75, 8.50, 10.15, 11.85],
+    },
+    (16, 1): {
+        "ub": [4.20, 5.50, 7.15, 8.95, 10.55, 12.25, 13.90],
+        "t2": [4.00, 5.30, 6.95, 8.75, 10.35, 12.05, 13.70],
+        "t1": [3.35, 4.80, 6.35, 8.10, 9.80, 11.50, 13.05],
+    },
+    (16, 2): {
+        "ub": [5.30, 8.20, 11.35, 14.65, 18.00, 21.30, 24.70],
+        "t2": [5.00, 7.80, 10.95, 14.25, 17.55, 20.90, 24.30],
+        "t1": [4.10, 6.65, 9.60, 12.85, 16.10, 19.25, 22.70],
+    },
+}
+
+#: Frozen reproduction setting, chosen by ``calibrate_f1`` (least-squares fit
+#: of all nine digitized curves over n_paths in 2..8 and the two 2-stream
+#: Type I variants; best SSE 6.2 vs 28.5 for the spec-restricted Type I).
+#: The paper does not specify its channel realization; this is the documented
+#: configuration the regression test pins down.  Known residual: the paper's
+#: N=4 single-stream Type I curve sits ~0.15 b/s/Hz below its Type II curve,
+#: while exhaustive-beam-search selection on this channel family gives ~0.5;
+#: the digitized-band tolerance (max of +-0.6 absolute / +-8% relative)
+#: absorbs it, and no swept knob closed it further.
+F1_REPRODUCTION: dict = {"n_paths": 8, "n_psk": 8, "seed": 0, "n_drops": 300,
+                         "t1_second_beam": "free"}
+
+
+def case_errors(curves: F1Curves, N: int, n_streams: int) -> dict[str, np.ndarray]:
+    """Signed reproduction-minus-digitized errors per curve."""
+    ref = F1_DIGITIZED[(N, n_streams)]
+    return {
+        "ub": curves.upper_bound - np.array(ref["ub"]),
+        "t2": curves.type2 - np.array(ref["t2"]),
+        "t1": curves.type1 - np.array(ref["t1"]),
+    }
+
+
+def calibrate_f1(
+    n_paths_grid=range(2, 9),
+    t1_variants=("tabmap", "free"),
+    n_drops: int = 300,
+    seed: int = 0,
+) -> list[tuple[float, dict]]:
+    """Least-squares sweep of the channel/selection knobs against the
+    digitized f1 table.  Returns (sse, setting) sorted best-first."""
+    results = []
+    for n_paths in n_paths_grid:
+        for t1_var in t1_variants:
+            sse = 0.0
+            for (N, ns) in F1_DIGITIZED:
+                curves = run_f1_case(
+                    N, ns, F1_SNR_DB, n_drops=n_drops, n_paths=n_paths,
+                    seed=seed, t1_second_beam=t1_var,
+                )
+                for err in case_errors(curves, N, ns).values():
+                    sse += float(np.sum(err**2))
+            results.append((sse, {"n_paths": n_paths, "t1_second_beam": t1_var,
+                                  "n_psk": 8, "seed": seed, "n_drops": n_drops}))
+    return sorted(results, key=lambda r: r[0])
