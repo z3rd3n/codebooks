@@ -27,28 +27,36 @@ def make_target_channel(cfg, beams, amps, phases, pol_amps, pol_phases, N3=1):
     return H, w / np.linalg.norm(w)
 
 
+def random_pmi(cbk, rank=1, seed=0):
+    """Random PMI with valid field ranges and conventions for ``cbk``."""
+    rng = np.random.default_rng(seed)
+    a = cbk.antenna
+    from nr_csi.utils import combinatorics as cb
+
+    pmi = R15Type2PMI(
+        rank=rank,
+        i13=[int(rng.integers(2 * cbk.L)) for _ in range(rank)],
+        k1=rng.integers(1, 8, size=(rank, 2 * cbk.L)),
+        k2=rng.integers(0, 2, size=(rank, cbk.N3, 2 * cbk.L)),
+        c=rng.integers(0, cbk.n_psk, size=(rank, cbk.N3, 2 * cbk.L)),
+    )
+    if cbk.port_selection:
+        pmi.i11_ps = int(rng.integers(int(np.ceil(a.P / (2 * cbk.d)))))
+    else:
+        n = sorted(rng.choice(a.N1 * a.N2, size=cbk.L, replace=False).tolist())
+        pmi.q1 = int(rng.integers(a.O1))
+        pmi.q2 = int(rng.integers(a.O2))
+        pmi.i12 = cb.combo_to_index(n, a.N1 * a.N2)
+    for li in range(rank):
+        pmi.k1[li, pmi.i13[li]] = 7
+        pmi.k2[li, :, pmi.i13[li]] = 1
+        pmi.c[li, :, pmi.i13[li]] = 0
+    return pmi
+
+
 class TestReconstruction:
     def _random_pmi(self, cbk, rank=1, seed=0):
-        rng = np.random.default_rng(seed)
-        a = cbk.antenna
-        n = sorted(rng.choice(a.N1 * a.N2, size=cbk.L, replace=False).tolist())
-        from nr_csi.utils import combinatorics as cb
-
-        pmi = R15Type2PMI(
-            rank=rank,
-            q1=int(rng.integers(a.O1)),
-            q2=int(rng.integers(a.O2)),
-            i12=cb.combo_to_index(n, a.N1 * a.N2),
-            i13=[int(rng.integers(2 * cbk.L)) for _ in range(rank)],
-            k1=rng.integers(1, 8, size=(rank, 2 * cbk.L)),
-            k2=rng.integers(0, 2, size=(rank, cbk.N3, 2 * cbk.L)),
-            c=rng.integers(0, cbk.n_psk, size=(rank, cbk.N3, 2 * cbk.L)),
-        )
-        for li in range(rank):
-            pmi.k1[li, pmi.i13[li]] = 7
-            pmi.k2[li, :, pmi.i13[li]] = 1
-            pmi.c[li, :, pmi.i13[li]] = 0
-        return pmi
+        return random_pmi(cbk, rank=rank, seed=seed)
 
     @pytest.mark.parametrize("rank", [1, 2])
     def test_unit_norm_per_layer_and_total(self, rank):
@@ -220,3 +228,80 @@ class TestOverhead:
         # 5 strong (8-PSK) + 2 weak (QPSK) phases per subband
         assert bits["i21"] == 2 * (5 * 3 + 2 * 2)
         assert bits["i22"] == 2 * 5
+
+
+class TestCompactModel:
+    """Spec reconstruction == compact model (paper "Compact Model for R15
+    Type II"): effective-basis form (a) and sparse full-basis form (b)."""
+
+    def _coeff(self, cbk, pmi, li, t):
+        """Quantized combination coefficients p1*p2*phi, shape (2L,)."""
+        p1 = qt.R15_WB_AMP[pmi.k1[li]]
+        p2 = qt.R15_SB_AMP[pmi.k2[li, t]] if cbk.sa else np.ones(2 * cbk.L)
+        sizes = cbk._phase_alphabets(pmi.k1[li], pmi.i13[li])
+        phi = np.exp(2j * np.pi * pmi.c[li, t] / sizes)
+        return p1 * p2 * phi
+
+    @pytest.mark.parametrize("sa", [False, True])
+    @pytest.mark.parametrize("rank", [1, 2])
+    def test_effective_basis_model_regular(self, sa, rank):
+        from nr_csi.codebooks.compact import compact_r15
+
+        cbk = R15Type2Codebook(CFG, N3=3, L=3, subband_amplitude=sa)
+        pmi = random_pmi(cbk, rank=rank, seed=5)
+        W = cbk.precoder(pmi)
+        B = cbk._basis(pmi)  # (L, P/2)
+        for li in range(rank):
+            for t in range(cbk.N3):
+                w_c = compact_r15(B, self._coeff(cbk, pmi, li, t))
+                w_spec = W[0, t, :, li]
+                assert np.allclose(w_spec / np.linalg.norm(w_spec),
+                                   w_c / np.linalg.norm(w_c))
+
+    def test_effective_basis_model_port_selection(self):
+        from nr_csi.codebooks.compact import compact_r15
+
+        cbk = R15Type2Codebook(CFG, N3=2, L=4, port_selection=True, d=2)
+        pmi = random_pmi(cbk, rank=1, seed=7)
+        W = cbk.precoder(pmi)
+        B = cbk._basis(pmi)
+        for t in range(cbk.N3):
+            w_c = compact_r15(B, self._coeff(cbk, pmi, 0, t))
+            w_spec = W[0, t, :, 0]
+            assert np.allclose(w_spec / np.linalg.norm(w_spec),
+                               w_c / np.linalg.norm(w_c))
+
+    def test_full_basis_model_sparse_w_pmi(self):
+        """Model (b): w = W_s @ w_PMI with W_s the full group basis and
+        w_PMI sparse with support = the selected beams."""
+        from nr_csi.codebooks.compact import dual_block
+        from nr_csi.utils import combinatorics as cb
+
+        cbk = R15Type2Codebook(CFG, N3=2, L=3)
+        pmi = random_pmi(cbk, rank=1, seed=11)
+        W = cbk.precoder(pmi)
+        n_half = CFG.N1 * CFG.N2
+        Ws_full = dual_block(dft.orthogonal_group(CFG, pmi.q1, pmi.q2))  # (P, 2*N1N2)
+        n1, n2 = cb.decode_beam_combination(pmi.i12, CFG.N1, CFG.N2, cbk.L)
+        support = [CFG.N1 * b + a for a, b in zip(n1, n2)]
+        for t in range(cbk.N3):
+            coeff = self._coeff(cbk, pmi, 0, t)
+            w_pmi = np.zeros(2 * n_half, dtype=complex)
+            for i, n in enumerate(support):
+                w_pmi[n] = coeff[i]
+                w_pmi[n_half + n] = coeff[cbk.L + i]
+            assert np.count_nonzero(w_pmi) <= 2 * cbk.L  # sparsity of the PMI
+            w_b = Ws_full @ w_pmi
+            w_spec = W[0, t, :, 0]
+            assert np.allclose(w_spec / np.linalg.norm(w_spec),
+                               w_b / np.linalg.norm(w_b))
+
+    def test_dual_block_structure(self):
+        from nr_csi.codebooks.compact import dual_block
+
+        rng = np.random.default_rng(0)
+        B = rng.standard_normal((3, 8)) + 1j * rng.standard_normal((3, 8))
+        Ws = dual_block(B)
+        assert Ws.shape == (16, 6)
+        assert np.allclose(Ws[:8, :3], B.T) and np.allclose(Ws[8:, 3:], B.T)
+        assert np.allclose(Ws[:8, 3:], 0) and np.allclose(Ws[8:, :3], 0)

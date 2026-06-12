@@ -1,4 +1,4 @@
 from .base import ChannelSource
-from .synthetic import Ray, SyntheticRayChannel
+from .synthetic import RandomRayChannel, Ray, SyntheticRayChannel
 
-__all__ = ["ChannelSource", "Ray", "SyntheticRayChannel"]
+__all__ = ["ChannelSource", "RandomRayChannel", "Ray", "SyntheticRayChannel"]
