@@ -35,6 +35,40 @@ from .base import CodebookScheme
 
 
 @dataclass
+class TypeIIRestriction:
+    """Type II codebook subset restriction B = B1 B2 (paper eqs. a58/a59).
+
+    beta1: combinatorial index (Algorithm 2, 11 bits) selecting the 4
+        restricted vector groups out of O1*O2.
+    b2: (4, N1*N2) entries in {0,1,2,3}, the 2-bit max-amplitude codepoints
+        of Table tabmaxap for each beam (x1, x2) of restricted group k,
+        indexed x = N1*x2 + x1.  0 prohibits the beam entirely.
+    """
+
+    beta1: int
+    b2: np.ndarray
+
+    #: Table tabmaxap codepoint -> max allowed p^(1), as the largest
+    #: admissible R15 wideband-amplitude index k1 (R15_WB_AMP[k1] <= max).
+    MAX_K1 = {0: -1, 1: 5, 2: 6, 3: 7}  # 0, sqrt(1/4), sqrt(1/2), 1
+
+    def restricted_groups(self, O1: int, O2: int) -> list[int]:
+        g, _, _ = cb.decode_restriction_groups(self.beta1, O1, O2)
+        return g
+
+    def k1_caps(self, antenna: AntennaConfig, q1: int, q2: int) -> np.ndarray:
+        """Max allowed k1 per beam n = N1*n2 + n1 of group (q1, q2);
+        7 (no cap) for unrestricted groups, -1 prohibits the beam."""
+        n_beams = antenna.N1 * antenna.N2
+        g = self.restricted_groups(antenna.O1, antenna.O2)
+        group = antenna.O1 * q2 + q1
+        if group not in g:
+            return np.full(n_beams, 7)
+        row = self.b2[g.index(group)]
+        return np.array([self.MAX_K1[int(v)] for v in row])
+
+
+@dataclass
 class R15Type2PMI:
     rank: int
     # regular variant: orthogonal group + beam combination
@@ -65,9 +99,15 @@ class R15Type2Codebook(CodebookScheme):
         subband_amplitude: bool = False,
         port_selection: bool = False,
         d: int = 1,
+        restriction: TypeIIRestriction | None = None,
     ) -> None:
         if L not in (2, 3, 4):
             raise ValueError("numberOfBeams L must be in {2,3,4}")
+        if L > antenna.n_ports_per_pol:
+            raise ValueError(
+                f"L={L} beams cannot be drawn from an orthogonal group of "
+                f"N1*N2={antenna.n_ports_per_pol} beams"
+            )
         if n_psk not in (4, 8):
             raise ValueError("phaseAlphabetSize must be 4 or 8")
         self.antenna = antenna
@@ -78,7 +118,17 @@ class R15Type2Codebook(CodebookScheme):
         self.port_selection = port_selection
         if port_selection:
             if not (1 <= d <= 4 and d <= min(antenna.P // 2, L)):
-                raise ValueError("portSelectionSamplingSize d must satisfy d<=min(P/2,L), d in 1..4")
+                raise ValueError(
+                    "portSelectionSamplingSize d must satisfy d<=min(P/2,L), d in 1..4"
+                )
+            if restriction is not None:
+                raise ValueError("subset restriction applies to the regular codebook only")
+        if restriction is not None:
+            if not 0 <= restriction.beta1 < comb(antenna.O1 * antenna.O2, 4):
+                raise ValueError("beta1 out of range")
+            if restriction.b2.shape != (4, antenna.N1 * antenna.N2):
+                raise ValueError(f"B2 must be (4, {antenna.N1 * antenna.N2}) codepoints")
+        self.restriction = restriction
         self.d = d
         self.name = "R15 Type II PS" if port_selection else "R15 Type II"
 
@@ -136,6 +186,9 @@ class R15Type2Codebook(CodebookScheme):
     # ------------------------------------------------------------------
 
     def precoder(self, pmi: R15Type2PMI) -> np.ndarray:
+        from .validate import validate_r15
+
+        validate_r15(self, pmi)
         a = self.antenna
         B = self._basis(pmi)  # (L, P/2)
         W = np.zeros((1, self.N3, a.P, pmi.rank), dtype=complex)
@@ -162,22 +215,39 @@ class R15Type2Codebook(CodebookScheme):
         from ..baselines.ideal import eigen_precoder
 
         H = np.asarray(H)[-1]  # (N3, Nr, P)
+        if H.shape[0] != self.N3:
+            raise ValueError(f"channel has {H.shape[0]} frequency units, expected {self.N3}")
         targets = eigen_precoder(H, rank=rank) * np.sqrt(rank)  # (N3, P, v) unit columns
 
         pmi = R15Type2PMI(rank=rank)
         if self.port_selection:
             pmi.i11_ps = _spatial.select_ps_initial(self.antenna, targets, self.L, self.d)
         else:
+            allowed = None
+            if self.restriction is not None:
+                allowed = lambda q1, q2: self.restriction.k1_caps(self.antenna, q1, q2) >= 0
             pmi.q1, pmi.q2, pmi.i12 = _spatial.select_group_and_beams(
-                self.antenna, targets, self.L
+                self.antenna, targets, self.L, allowed=allowed
             )
         B = self._basis(pmi)  # (L, P/2)
         coeff = _spatial.ls_coefficients(B, targets, self._beta_factor())
-        self._quantize_into(pmi, coeff)
+        self._quantize_into(pmi, coeff, self._selected_caps(pmi))
         return pmi
 
-    def _quantize_into(self, pmi: R15Type2PMI, coeff: np.ndarray) -> None:
-        """Fill i13/k1/k2/c from LS coefficients (v, N3, 2L)."""
+    def _selected_caps(self, pmi: R15Type2PMI) -> np.ndarray | None:
+        """Per-coefficient max k1 (2L,) for the selected beams, or None."""
+        if self.restriction is None or self.port_selection:
+            return None
+        n1, n2 = cb.decode_beam_combination(pmi.i12, self.antenna.N1, self.antenna.N2, self.L)
+        caps_group = self.restriction.k1_caps(self.antenna, pmi.q1, pmi.q2)
+        caps = np.array([caps_group[self.antenna.N1 * b + a] for a, b in zip(n1, n2)])
+        return np.concatenate([caps, caps])  # both polarizations
+
+    def _quantize_into(
+        self, pmi: R15Type2PMI, coeff: np.ndarray, caps: np.ndarray | None = None
+    ) -> None:
+        """Fill i13/k1/k2/c from LS coefficients (v, N3, 2L); ``caps``
+        optionally bounds each k1 (subset restriction, Table tabmaxap)."""
         rank = pmi.rank
         L2 = 2 * self.L
         pmi.i13 = []
@@ -187,13 +257,23 @@ class R15Type2Codebook(CodebookScheme):
         for li in range(rank):
             cl = coeff[li]  # (N3, 2L)
             wb_amp = np.sqrt(np.mean(np.abs(cl) ** 2, axis=0))  # (2L,)
-            i_star = int(np.argmax(wb_amp))
+            if caps is not None:
+                # the strongest coefficient is reported as k1 = 7, so it must
+                # come from an uncapped beam to keep the restriction honest
+                eligible = np.where(caps >= 7, wb_amp, -np.inf)
+                i_star = int(np.argmax(eligible))
+                if not np.isfinite(eligible[i_star]):
+                    i_star = int(np.argmax(wb_amp))
+            else:
+                i_star = int(np.argmax(wb_amp))
             pmi.i13.append(i_star)
             # rotate each subband so the strongest coefficient has zero phase
             rot = np.exp(-1j * np.angle(cl[:, i_star]))[:, None]
             cl = cl * rot
             ref = wb_amp[i_star]
             k1_row = qt.quantize_amplitude(np.minimum(wb_amp / ref, 1.0), qt.R15_WB_AMP)
+            if caps is not None:
+                k1_row = np.minimum(k1_row, np.maximum(caps, 0))
             k1_row[i_star] = 7
             pmi.k1[li] = k1_row
             strong, weak, zero = self._partition(k1_row, i_star)

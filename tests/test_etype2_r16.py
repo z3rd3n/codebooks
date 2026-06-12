@@ -10,11 +10,10 @@ from nr_csi.codebooks.etype2_r16 import (
     decode_i18,
     encode_i18,
 )
-from nr_csi.config import AntennaConfig, R16_PARAM_COMBOS
+from nr_csi.config import AntennaConfig
 from nr_csi.metrics import sgcs
 from nr_csi.utils import combinatorics as cb
 from nr_csi.utils import dft
-from nr_csi.utils import quantization as qt
 
 CFG = AntennaConfig.standard(4, 2)  # P = 16, N1N2 = 8
 

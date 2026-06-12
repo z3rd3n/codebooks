@@ -62,6 +62,7 @@ class Type1Codebook(CodebookScheme):
         N3: int = 1,
         mode: int = 1,
         beam_restriction: np.ndarray | None = None,
+        rank_restriction: np.ndarray | None = None,
         selection_snr_db: float = 10.0,
     ) -> None:
         if mode not in (1, 2):
@@ -77,6 +78,11 @@ class Type1Codebook(CodebookScheme):
         self.beam_restriction = np.asarray(beam_restriction, dtype=bool)
         if self.beam_restriction.shape != (n_bits,):
             raise ValueError(f"beam restriction bitmap must have {n_bits} bits")
+        if rank_restriction is None:
+            rank_restriction = np.ones(8, dtype=bool)
+        self.rank_restriction = np.asarray(rank_restriction, dtype=bool)
+        if self.rank_restriction.shape != (8,):
+            raise ValueError("rank restriction r = [r0..r7] must have 8 bits")
         self.selection_rho = 10 ** (selection_snr_db / 10)
 
     # -- helpers -----------------------------------------------------------
@@ -112,6 +118,9 @@ class Type1Codebook(CodebookScheme):
     # -- gNB side ----------------------------------------------------------
 
     def precoder(self, pmi: Type1PMI) -> np.ndarray:
+        from .validate import validate_type1
+
+        validate_type1(self, pmi)
         a = self.antenna
         W = np.empty((1, self.N3, a.P, pmi.rank), dtype=complex)
         offsets = i13_offsets(a.N1, a.N2, a.O1, a.O2) if pmi.rank == 2 else None
@@ -129,6 +138,10 @@ class Type1Codebook(CodebookScheme):
     def select(self, H: np.ndarray, rank: int = 1) -> Type1PMI:
         if rank not in (1, 2):
             raise ValueError("Type I implementation supports ranks 1-2")
+        if not self.rank_restriction[rank - 1]:
+            raise ValueError(
+                f"rank {rank} prohibited by typeI-SinglePanel-ri-Restriction (r{rank - 1}=0)"
+            )
         H = np.asarray(H)
         if H.ndim != 4:
             raise ValueError("H must be [slot, t, rx, port]")
@@ -146,39 +159,51 @@ class Type1Codebook(CodebookScheme):
         offsets = i13_offsets(a.N1, a.N2, a.O1, a.O2) if rank == 2 else [None]
         n_i2 = self._n_i2(rank)
 
-        best = (-np.inf, None)
-        for i11, i12 in cand_wb:
-            for i13_idx, _ in enumerate(offsets):
-                metric = 0.0
-                i2_per_t = np.zeros(self.N3, dtype=int)
-                feasible = True
-                for t in range(self.N3):
-                    rates = np.full(n_i2, -np.inf)
-                    for i2 in range(n_i2):
-                        pmi_t = Type1PMI(rank, self.mode, i11, i12,
-                                         np.array([i2]), i13_idx if rank == 2 else None)
-                        l, m, n = self._beam_and_phase(pmi_t, 0)
-                        if not self._beam_allowed(l, m):
-                            continue
-                        if rank == 1:
-                            Wc = self._w_rank1(l, m, n)
-                        else:
-                            k1, k2 = offsets[i13_idx]
-                            if not self._beam_allowed(l + k1, m + k2):
-                                continue
-                            Wc = self._w_rank2(l, l + k1, m, m + k2, n)
-                        rates[i2] = _su_logdet(Ht[t], Wc, self.selection_rho)
-                    if np.isinf(rates).all():
-                        feasible = False
-                        break
-                    i2_per_t[t] = int(rates.argmax())
-                    metric += rates.max()
-                if feasible and metric > best[0]:
-                    best = (metric, Type1PMI(rank, self.mode, i11, i12, i2_per_t,
-                                             i13_idx if rank == 2 else None))
-        if best[1] is None:
+        # precompute every candidate precoder once: (C, n_i2, P, v)
+        cands = [(i11, i12, i13_idx) for i11, i12 in cand_wb
+                 for i13_idx in range(len(offsets))]
+        C = len(cands)
+        Wc = np.zeros((C, n_i2, a.P, rank), dtype=complex)
+        allowed = np.zeros((C, n_i2), dtype=bool)
+        for ci, (i11, i12, i13_idx) in enumerate(cands):
+            for i2 in range(n_i2):
+                pmi_t = Type1PMI(rank, self.mode, i11, i12,
+                                 np.array([i2]), i13_idx if rank == 2 else None)
+                l, m, n = self._beam_and_phase(pmi_t, 0)
+                if not self._beam_allowed(l, m):
+                    continue
+                if rank == 1:
+                    Wc[ci, i2] = self._w_rank1(l, m, n)
+                else:
+                    k1, k2 = offsets[i13_idx]
+                    if not self._beam_allowed(l + k1, m + k2):
+                        continue
+                    Wc[ci, i2] = self._w_rank2(l, l + k1, m, m + k2, n)
+                allowed[ci, i2] = True
+
+        # vectorized per-(candidate, i2, t) rate: log2 det(I + rho/v (HW)^H HW)
+        HW = np.einsum("tnp,ckpv->cktnv", Ht, Wc)  # (C, n_i2, N3, Nr, v)
+        rho = self.selection_rho
+        if rank == 1:
+            rates = np.log2(1 + rho * np.sum(np.abs(HW[..., 0]) ** 2, axis=-1))
+        else:
+            g11 = np.sum(np.abs(HW[..., 0]) ** 2, axis=-1)
+            g22 = np.sum(np.abs(HW[..., 1]) ** 2, axis=-1)
+            g12 = np.sum(HW[..., 0].conj() * HW[..., 1], axis=-1)
+            r2 = rho / 2
+            rates = np.log2((1 + r2 * g11) * (1 + r2 * g22) - r2**2 * np.abs(g12) ** 2)
+        rates = np.where(allowed[:, :, None], rates, -np.inf)  # (C, n_i2, N3)
+
+        metric = rates.max(axis=1).sum(axis=-1)  # (C,)
+        feasible = allowed.any(axis=1)
+        metric = np.where(feasible, metric, -np.inf)
+        if not feasible.any():
             raise RuntimeError("no feasible Type I PMI under the configured restriction")
-        return best[1]
+        ci = int(np.argmax(metric))
+        i11, i12, i13_idx = cands[ci]
+        i2_per_t = rates[ci].argmax(axis=0).astype(int)  # (N3,)
+        return Type1PMI(rank, self.mode, i11, i12, i2_per_t,
+                        i13_idx if rank == 2 else None)
 
     def _n_i2(self, rank: int) -> int:
         if self.mode == 1:
@@ -201,10 +226,3 @@ class Type1Codebook(CodebookScheme):
             bits["i13"] = math.ceil(math.log2(n_off))
         return bits
 
-
-def _su_logdet(Ht: np.ndarray, W: np.ndarray, rho: float) -> float:
-    """log2 det(I + rho/v * (HW)(HW)^H) for one frequency unit."""
-    HW = Ht @ W
-    v = W.shape[1]
-    G = HW.conj().T @ HW  # (v, v)
-    return float(np.log2(np.linalg.det(np.eye(v) + (rho / v) * G).real))
