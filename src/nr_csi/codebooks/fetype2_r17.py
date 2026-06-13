@@ -69,6 +69,8 @@ class R17Type2Codebook(CodebookScheme):
             raise ValueError(f"K1 = alpha*P = {K1} exceeds the {antenna.P} CSI-RS ports")
         if N3 < 1:
             raise ValueError("N3 must be positive")
+        if self.M > N3:
+            raise ValueError(f"M={self.M} selected taps cannot exceed N3={N3}")
         self.K1 = int(K1)
         self.L = self.K1 // 2
         if N_window not in (2, 4):

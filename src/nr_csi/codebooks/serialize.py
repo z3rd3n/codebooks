@@ -63,6 +63,16 @@ def _w(n: int) -> int:
     return math.ceil(math.log2(n)) if n > 1 else 0
 
 
+def _require_done(reader: BitReader) -> None:
+    """Reject malformed external input that carries trailing, unconsumed bits.
+
+    Wire-format validation must raise ``ValueError`` (not ``assert``, which is
+    stripped under ``python -O`` and reports a bare ``AssertionError``)."""
+    if not reader.done():
+        remaining = len(reader.bits) - reader.pos
+        raise ValueError(f"bitstream has {remaining} trailing bit(s)")
+
+
 # ---------------------------------------------------------------------------
 # R15 Type I
 # ---------------------------------------------------------------------------
@@ -94,7 +104,7 @@ def unpack_type1(cbk, bits: str, rank: int):
     i12 = r.read(_w(max(G2 // div, 1)))
     i13 = r.read(_w(len(i13_offsets(a.N1, a.N2, a.O1, a.O2)))) if rank == 2 else None
     i2 = np.array([r.read(_w(cbk._n_i2(rank))) for _ in range(cbk.N3)])
-    assert r.done()
+    _require_done(r)
     return Type1PMI(rank=rank, mode=cbk.mode, i11=i11, i12=i12, i2=i2, i13=i13)
 
 
@@ -173,7 +183,7 @@ def unpack_r15(cbk, bits: str, rank: int):
             if cbk.sa:
                 for i in strong:
                     pmi.k2[li, t, i] = r.read(1)
-    assert r.done()
+    _require_done(r)
     return pmi
 
 
@@ -283,7 +293,7 @@ def unpack_r16(cbk, bits: str, rank: int):
         star_flat.append(i_star)
         p_stars.append(i_star // cbk.L)
     _unpack_coefficients(r, pmi, star_flat, p_stars, cbk.N_PSK, (Mv, L2))
-    assert r.done()
+    _require_done(r)
     return pmi
 
 
@@ -330,7 +340,7 @@ def unpack_r17(cbk, bits: str, rank: int):
         star_flat.append(f_star * cbk.K1 + i_star)
         p_stars.append(i_star // cbk.L)
     _unpack_coefficients(r, pmi, star_flat, p_stars, cbk.N_PSK, (cbk.M, cbk.K1))
-    assert r.done()
+    _require_done(r)
     return pmi
 
 
@@ -392,7 +402,7 @@ def unpack_r18(cbk, bits: str, rank: int):
         star_flat.append((tau_star * Mv + 0) * L2 + i_star)
         p_stars.append(i_star // cbk.L)
     _unpack_coefficients(r, pmi, star_flat, p_stars, cbk.N_PSK, (Q, Mv, L2))
-    assert r.done()
+    _require_done(r)
     return pmi
 
 

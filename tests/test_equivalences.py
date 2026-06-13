@@ -29,15 +29,16 @@ class TestR16PortSelectionPEB:
         """R16 level of the R15 PEB identity: the PS codebook fed with the
         beam-domain channel reconstructs the same precoders as the regular
         codebook on the physical channel, including the delay compression."""
+        ant = AntennaConfig.standard(8, 1)
         N3, L = 8, 4
         rng = np.random.default_rng(4)
-        half = ANT.P // 2
+        half = ant.P // 2
         # physical channel from the 4 consecutive group-(0,0) beams 0..3
         # (R16 PS selects consecutive ports), each with its own delay tap
-        beams = dft.orthogonal_group(ANT, 0, 0)[:L]  # (L, P/2)
+        beams = dft.orthogonal_group(ant, 0, 0)[:L]  # (L, P/2)
         delays = [0, 1, 2, 3]
         t = np.arange(N3)
-        w = np.zeros((N3, ANT.P), dtype=complex)
+        w = np.zeros((N3, ant.P), dtype=complex)
         for i in range(L):
             g1, g2 = rng.standard_normal(2) + 1j * rng.standard_normal(2)
             ramp = np.exp(2j * np.pi * t * delays[i] / N3)
@@ -45,13 +46,13 @@ class TestR16PortSelectionPEB:
             w[:, half:] += 0.5 * g2 * np.outer(ramp, beams[i])
         H_phys = w.conj()[None, :, None, :]  # (1, N3, 1, P)
 
-        reg = R16Type2Codebook(ANT, N3=N3, param_combination=4)
+        reg = R16Type2Codebook(ant, N3=N3, param_combination=4)
         pmi_reg = reg.select(H_phys, rank=1)
         W_reg = reg.precoder(pmi_reg)
 
-        F = dft.orthogonal_group(ANT, 0, 0).T  # (P/2 physical, P/2 logical)
+        F = dft.unitary_peb(ant, 0, 0)
         H_eff = beam_domain(H_phys, F)
-        ps = R16Type2Codebook(ANT, N3=N3, param_combination=4, port_selection=True, d=1)
+        ps = R16Type2Codebook(ant, N3=N3, param_combination=4, port_selection=True, d=1)
         pmi_ps = ps.select(H_eff, rank=1)
         W_ps = ps.precoder(pmi_ps)
         # the compressed indications agree...

@@ -103,11 +103,12 @@ class SubbandConfig:
     def __post_init__(self) -> None:
         if self.R not in (1, 2):
             raise ValueError("R (numberOfPMI-SubbandsPerCQI-Subband) must be 1 or 2")
-        if not 1 <= self.n_subbands <= 19:
-            # csi-ReportingBand ranges over {3,...,18} in the paper; we allow
-            # small values for unit tests but keep the spec upper bound.
-            if self.n_subbands > 19:
-                raise ValueError("at most 19 CQI subbands are configurable")
+        # csi-ReportingBand ranges over {3,...,18} in the paper; we allow small
+        # positive values for unit tests but keep the spec bounds on both ends.
+        if self.n_subbands < 1:
+            raise ValueError("n_subbands must be positive")
+        if self.n_subbands > 19:
+            raise ValueError("at most 19 CQI subbands are configurable")
 
     @property
     def N3(self) -> int:
@@ -116,6 +117,8 @@ class SubbandConfig:
 
 def m_v(p_v: Fraction | float, N3: int, R: int) -> int:
     """Number of selected delay taps: M_v = ceil(p_v * N3 / R)  (paper eq. c66)."""
+    if R not in (1, 2):
+        raise ValueError("R must be 1 or 2")
     return math.ceil(Fraction(p_v) * N3 / R)
 
 

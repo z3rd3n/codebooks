@@ -94,6 +94,8 @@ class R18Type2Codebook(CodebookScheme):
         self.antenna = antenna
         self.N3 = N3
         self.N4 = N4
+        if R not in (1, 2):
+            raise ValueError("R must be 1 or 2")
         self.R = R
         self.combo = R18_PARAM_COMBOS[param_combination]
         self.L = self.combo.L

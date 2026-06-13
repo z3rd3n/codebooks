@@ -110,6 +110,8 @@ class R16Type2Codebook(CodebookScheme):
     ) -> None:
         self.antenna = antenna
         self.N3 = N3
+        if R not in (1, 2):
+            raise ValueError("R must be 1 or 2")
         self.R = R
         self.combo = R16_PARAM_COMBOS[param_combination]
         self.L = self.combo.L
