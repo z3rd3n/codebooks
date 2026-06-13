@@ -32,9 +32,8 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")  # quiet TF before any import
 
 import sys  # noqa: E402
 
-import numpy as np  # noqa: E402
-
 import figlib  # noqa: E402
+import numpy as np  # noqa: E402
 
 from nr_csi.channel.base import ChannelSource  # noqa: E402
 from nr_csi.eval import evaluate  # noqa: E402

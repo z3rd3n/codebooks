@@ -162,6 +162,7 @@ class MuEvalResult:
     sum_rate: list[float]  # mean ZF/RZF sum rate from reported PMIs
     sum_rate_full_csi: list[float]  # same precoding from true eigen directions
     n_users: int
+    rank: int = 1  # layers (streams) per user
 
 
 def evaluate_mu(
@@ -172,13 +173,18 @@ def evaluate_mu(
     n_drops: int = 20,
     rng: np.random.Generator | None = None,
     regularization: float | None = None,
+    rank: int = 1,
 ) -> MuEvalResult:
-    """MU-MIMO evaluation (paper eq. 2): each user reports a rank-1 PMI on
-    its own channel drop; the gNB zero-forces across the reported precoder
-    directions (RZF with ``regularization`` if given) and the per-user rates
-    include the residual inter-user interference.
+    """MU-MIMO evaluation (paper eq. 2): each user reports a rank-``rank`` PMI
+    on its own channel drop; the gNB zero-forces across *all* reported
+    precoder directions (RZF with ``regularization`` if given) so each of the
+    K*rank streams nulls the others, and the per-user rates include the
+    residual inter-user (and inter-stream) interference.  A user's rate sums
+    its ``rank`` layers; transmit power ``rho`` is split equally across the
+    K*rank streams (``rank=1`` reproduces the single-stream-per-user model
+    exactly).
 
-    The full-CSI reference applies the same cross-user precoding to the true
+    The full-CSI reference applies the same cross-stream precoding to the true
     per-user eigenvectors, so the gap isolates the feedback quantization
     loss -- the comparison Type II codebooks (and ML schemes) exist for.
     """
@@ -194,9 +200,9 @@ def evaluate_mu(
         reported = []
         ideal = []
         for H in Hs:
-            W = scheme.precoder(scheme.select(H, rank=1))  # (1, N3, P, 1)
-            reported.append(W[0, :, :, 0])  # (N3, P)
-            ideal.append(eig(H, rank=1)[0, :, :, 0])
+            W = scheme.precoder(scheme.select(H, rank=rank))  # (1, N3, P, rank)
+            reported.append(W[0])  # (N3, P, rank)
+            ideal.append(eig(H, rank=rank)[0])  # (N3, P, rank)
         H_users = np.stack([H[0] for H in Hs])  # (K, N3, Nr, P)
         for i, rho in enumerate(rhos):
             sums[i] += _zf_sum_rate(H_users, np.stack(reported), rho, regularization)
@@ -207,27 +213,34 @@ def evaluate_mu(
         sum_rate=list(sums / n_drops),
         sum_rate_full_csi=list(sums_full / n_drops),
         n_users=n_users,
+        rank=rank,
     )
 
 
 def _zf_sum_rate(
     H_users: np.ndarray, directions: np.ndarray, rho: float, xi: float | None
 ) -> float:
-    """ZF/RZF across reported directions, scored with paper eq. (2).
+    """ZF/RZF across all reported stream-directions, scored with paper eq. (2).
 
-    H_users: (K, N3, Nr, P) true channels; directions: (K, N3, P) the
-    reported (or ideal) per-user precoder directions.
+    H_users: (K, N3, Nr, P) true channels; directions: (K, N3, P, v) the
+    reported (or ideal) per-user precoder directions (v = layers per user).
+    The gNB treats every one of the K*v layers as a stream to be isolated:
+    it zero-forces across the stacked K*v directions, normalizes each beam,
+    and splits ``rho`` equally over the K*v streams.  The per-beam direction
+    is invariant to the reported columns' magnitudes (row scaling of the
+    stacked matrix cancels under the pseudo-inverse + per-column norm), so
+    v = 1 reproduces the single-stream model bit-for-bit.
     """
     from ..baselines.ideal import rzf, zf
     from ..metrics.se import mu_rate
 
-    K, N3 = directions.shape[:2]
-    W = np.zeros((K, N3, directions.shape[2], 1), dtype=complex)
+    K, N3, P, v = directions.shape
+    W = np.zeros((K, N3, P, v), dtype=complex)
     for t in range(N3):
-        D = directions[:, t, :].conj()  # (K, P) "channel" seen by the gNB
-        F = zf(D) if xi is None else rzf(D, xi)  # (P, K)
+        # stack the K*v reported directions, row k*v + j = user k, layer j
+        D = np.transpose(directions[:, t].conj(), (0, 2, 1)).reshape(K * v, P)
+        F = zf(D) if xi is None else rzf(D, xi)  # (P, K*v)
         F = F / np.linalg.norm(F, axis=0, keepdims=True)
-        for k in range(K):
-            W[k, t, :, 0] = F[:, k]
-    rates = mu_rate(H_users, W, rho / K)  # equal power split across users
+        W[:, t] = F.T.reshape(K, v, P).transpose(0, 2, 1)  # (K, P, v)
+    rates = mu_rate(H_users, W, rho / (K * v))  # equal power split across streams
     return float(np.sum(rates))

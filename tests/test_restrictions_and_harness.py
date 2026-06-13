@@ -290,3 +290,31 @@ class TestMuEvaluation:
         res = evaluate_mu(cbk, chan, n_users=2, snr_db=[10.0], n_drops=4,
                           rng=np.random.default_rng(10), regularization=0.1)
         assert res.sum_rate[0] > 0
+
+    def test_rank2_mu_multiplexing_and_quantization_gap(self):
+        """rank>1 MU: the gNB zero-forces across all K*rank streams and a
+        user's rate sums its layers.  Full-CSI rank 2 must beat full-CSI rank 1
+        (the extra stream is real multiplexing gain), and every quantized sum
+        rate stays at or below its full-CSI reference."""
+        chan = RandomRayChannel(ANT, N3=4, n_rx=2, n_paths=4)
+        kw = dict(n_users=2, snr_db=[20.0], n_drops=12)
+        r1 = evaluate_mu(R16Type2Codebook(ANT, N3=4, param_combination=6), chan,
+                         rank=1, rng=np.random.default_rng(3), **kw)
+        r2 = evaluate_mu(R16Type2Codebook(ANT, N3=4, param_combination=6), chan,
+                         rank=2, rng=np.random.default_rng(3), **kw)
+        assert r2.rank == 2
+        assert r2.sum_rate_full_csi[0] > r1.sum_rate_full_csi[0]
+        assert 0 < r1.sum_rate[0] <= r1.sum_rate_full_csi[0] + 1e-9
+        assert 0 < r2.sum_rate[0] <= r2.sum_rate_full_csi[0] + 1e-9
+
+    def test_rank2_type2_beats_type1(self):
+        """Finer feedback unlocks higher-rank MU: at rank 2 Type II's accurate
+        2-layer directions keep the inter-stream ZF clean where Type I's coarse
+        ones leak (plan C2.2, sharpened at rank 2)."""
+        chan = RandomRayChannel(ANT, N3=4, n_rx=2, n_paths=4)
+        kw = dict(n_users=2, snr_db=[20.0], n_drops=16, rank=2)
+        t1 = evaluate_mu(Type1Codebook(ANT, N3=4), chan,
+                         rng=np.random.default_rng(5), **kw)
+        t2 = evaluate_mu(R16Type2Codebook(ANT, N3=4, param_combination=6), chan,
+                         rng=np.random.default_rng(5), **kw)
+        assert t2.sum_rate[0] > t1.sum_rate[0]

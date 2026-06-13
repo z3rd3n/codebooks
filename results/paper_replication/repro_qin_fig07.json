@@ -1,0 +1,60 @@
+{
+ "operating_point": {
+  "P": 32,
+  "N1": 8,
+  "N2": 2,
+  "N3": 13,
+  "rank": 2,
+  "snr_db": 10.0,
+  "drops": 40,
+  "seed": 0
+ },
+ "baseline_se": 8.571673497404706,
+ "points": [
+  {
+   "label": "R15 Type I",
+   "family": "R15 Type I",
+   "domain": "antenna",
+   "bits": 23.0,
+   "se": 8.571673497404706,
+   "sgcs": 0.2328008658098623,
+   "gain": 100.0
+  },
+  {
+   "label": "R16 eType II",
+   "family": "R16 eType II",
+   "domain": "antenna",
+   "bits": 358.75,
+   "se": 10.38162411927606,
+   "sgcs": 0.9468217776958916,
+   "gain": 121.11548721984525
+  },
+  {
+   "label": "R16 eType II PS",
+   "family": "R16 eType II PS",
+   "domain": "tuned",
+   "bits": 376.45,
+   "se": 9.924827907310746,
+   "sgcs": 0.8276363240887177,
+   "gain": 115.78635035872216
+  },
+  {
+   "label": "R17 FeType II PS (DFT)",
+   "family": "R17 FeType II PS",
+   "domain": "beam",
+   "bits": 286.3,
+   "se": 10.216392716004925,
+   "sgcs": 0.8834458754125908,
+   "gain": 119.18784259687679
+  },
+  {
+   "label": "R17 FeType II PS (eigen)",
+   "family": "R17 FeType II PS",
+   "domain": "eigen",
+   "bits": 149.625,
+   "se": 10.371143851435837,
+   "sgcs": 0.9261473059733302,
+   "gain": 120.99322092209844
+  }
+ ]
+}

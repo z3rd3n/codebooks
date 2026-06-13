@@ -1,0 +1,100 @@
+{
+ "operating_point": {
+  "P": 32,
+  "N1": 8,
+  "N2": 2,
+  "N3": 13,
+  "n_users": 4,
+  "snr_db": 15.0,
+  "rank": 1,
+  "drops": 40,
+  "seed": 0
+ },
+ "baseline_sum_rate": 24.15934095244296,
+ "points": [
+  {
+   "family": "R15 Type I",
+   "config": "rank-1 baseline",
+   "bits": 34.0,
+   "sum_rate": 24.15934095244296,
+   "gain": 100.00000000000001
+  },
+  {
+   "family": "R15 Type II",
+   "config": "L=2",
+   "bits": 178.0,
+   "sum_rate": 25.168242426044156,
+   "gain": 104.17603061104685
+  },
+  {
+   "family": "R15 Type II",
+   "config": "L=3",
+   "bits": 240.0,
+   "sum_rate": 25.958262676184148,
+   "gain": 107.44607117918622
+  },
+  {
+   "family": "R15 Type II",
+   "config": "L=4",
+   "bits": 348.4,
+   "sum_rate": 26.952371776721304,
+   "gain": 111.56087341031508
+  },
+  {
+   "family": "R16 eType II",
+   "config": "pc1 (L=2,Mv=4)",
+   "bits": 62.0,
+   "sum_rate": 25.40174268713369,
+   "gain": 105.14253156630542
+  },
+  {
+   "family": "R16 eType II",
+   "config": "pc2 (L=2,Mv=4)",
+   "bits": 85.275,
+   "sum_rate": 25.65703095859891,
+   "gain": 106.19921714381245
+  },
+  {
+   "family": "R16 eType II",
+   "config": "pc3 (L=4,Mv=4)",
+   "bits": 111.0,
+   "sum_rate": 26.947529475809326,
+   "gain": 111.54083022734288
+  },
+  {
+   "family": "R16 eType II",
+   "config": "pc4 (L=4,Mv=4)",
+   "bits": 157.55,
+   "sum_rate": 27.765585504567166,
+   "gain": 114.9269160910598
+  },
+  {
+   "family": "R16 eType II",
+   "config": "pc5 (L=4,Mv=4)",
+   "bits": 179.25,
+   "sum_rate": 27.884031755431778,
+   "gain": 115.41718712576132
+  },
+  {
+   "family": "R16 eType II",
+   "config": "pc6 (L=4,Mv=7)",
+   "bits": 223.625,
+   "sum_rate": 27.94027501732446,
+   "gain": 115.64998843438723
+  },
+  {
+   "family": "R16 eType II",
+   "config": "pc7 (L=6,Mv=4)",
+   "bits": 223.625,
+   "sum_rate": 28.85530648991446,
+   "gain": 119.43747367411797
+  },
+  {
+   "family": "R16 eType II",
+   "config": "pc8 (L=6,Mv=4)",
+   "bits": 249.0,
+   "sum_rate": 28.90255465240788,
+   "gain": 119.63304259541604
+  }
+ ]
+}
