@@ -1,0 +1,49 @@
+{
+ "model": "C",
+ "drops": 80,
+ "seed": 0,
+ "schemes": [
+  "R15 Type I",
+  "R15 Type II",
+  "R16 eType II",
+  "R17 FeType II PS",
+  "oracle-SVD 8-bit"
+ ],
+ "sgcs": {
+  "R15 Type I": 0.496012226915743,
+  "R15 Type II": 0.8231594528386349,
+  "R16 eType II": 0.8326222433367316,
+  "R17 FeType II PS": 0.8912108608104694,
+  "oracle-SVD 8-bit": 0.9251622558409451
+ },
+ "overhead_bits": {
+  "R15 Type I": 22.0,
+  "R15 Type II": 149.1,
+  "R16 eType II": 88.0,
+  "R17 FeType II PS": 161.5625,
+  "oracle-SVD 8-bit": 2048.0
+ },
+ "se_at_db": {
+  "0": {
+   "R15 Type I": 4.621458489797938,
+   "R15 Type II": 5.196502935720261,
+   "R16 eType II": 5.212525854930513,
+   "R17 FeType II PS": 5.3083778280201575,
+   "oracle-SVD 8-bit": 5.358630538551816
+  },
+  "10": {
+   "R15 Type I": 7.887802237599135,
+   "R15 Type II": 8.482046986873467,
+   "R16 eType II": 8.498511249709066,
+   "R17 FeType II PS": 8.596785582868124,
+   "oracle-SVD 8-bit": 8.648346206537536
+  },
+  "20": {
+   "R15 Type I": 11.204044272718713,
+   "R15 Type II": 11.80028405999936,
+   "R16 eType II": 11.816793880425474,
+   "R17 FeType II PS": 11.915317385118241,
+   "oracle-SVD 8-bit": 11.967012606325067
+  }
+ }
+}
