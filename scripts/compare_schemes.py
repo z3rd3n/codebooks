@@ -72,7 +72,7 @@ def main() -> None:
     ]
     print(f"{'scheme':<22} {'SE@0dB':>7} {'SE@10dB':>8} {'SE@20dB':>8} {'SGCS':>6} {'bits':>7}")
     for scheme in schemes:
-        res = evaluate(scheme, chan, snr_db=[0, 10, 20], rank=1, n_drops=50,
+        res = evaluate(scheme, chan, snr_db=[0, 10, 20], rank=2, n_drops=50,
                        rng=np.random.default_rng(7))
         print(f"{res.scheme:<22} {res.se[0]:>7.2f} {res.se[1]:>8.2f} "
               f"{res.se[2]:>8.2f} {res.sgcs:>6.3f} {res.overhead_bits:>7.0f}")

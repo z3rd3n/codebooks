@@ -21,8 +21,10 @@ from nr_csi.codebooks import (
     R15Type2Codebook,
     R16Type2Codebook,
     R17Type2Codebook,
+    R18PredictedPortSelectionCodebook,
     R18Type2Codebook,
     Type1Codebook,
+    Type1MultiPanelCodebook,
 )
 from nr_csi.codebooks.validate import (
     validate_r15,
@@ -30,6 +32,7 @@ from nr_csi.codebooks.validate import (
     validate_r17,
     validate_r18,
     validate_type1,
+    validate_type1_multipanel,
 )
 from nr_csi.config import SUPPORTED_N1N2, AntennaConfig
 from nr_csi.metrics.similarity import sgcs
@@ -95,6 +98,34 @@ def test_high_ranks_r16_r17_r18(rank):
         pmi = cbk.select(H, rank=rank)
         validator(cbk, pmi)
         check_precoder(cbk.precoder(pmi), rank, ant.P, n_slots)
+
+
+@pytest.mark.parametrize("rank", [3, 4, 5, 6, 7, 8])
+def test_type1_high_rank_invariants(rank):
+    ant = AntennaConfig.standard(4, 2)
+    rng = np.random.default_rng(100 + rank)
+    cbk = Type1Codebook(ant, N3=N3)
+    H = random_channel(rng, 1, ant.P, n_rx=8)
+    pmi = cbk.select(H, rank)
+    validate_type1(cbk, pmi)
+    check_precoder(cbk.precoder(pmi), rank, ant.P, 1)
+
+
+def test_new_family_invariants():
+    rng = np.random.default_rng(44)
+    ant = AntennaConfig.standard(2, 1, Ng=2)
+    mp = Type1MultiPanelCodebook(ant, N3=N3, mode=2)
+    H = random_channel(rng, 1, ant.P, n_rx=4)
+    pmi = mp.select(H, rank=4)
+    validate_type1_multipanel(mp, pmi)
+    check_precoder(mp.precoder(pmi), 4, ant.P, 1)
+
+    ant = AntennaConfig.standard(4, 2)
+    predicted = R18PredictedPortSelectionCodebook(ant, N3=N3, param_combination=5)
+    H = random_channel(rng, 1, ant.P, n_rx=4)
+    pmi = predicted.select(H, rank=4)
+    validate_r17(predicted, pmi)
+    check_precoder(predicted.precoder(pmi), 4, ant.P, 1)
 
 
 @pytest.mark.parametrize("n1,n2", IDEMPOTENCE_CONFIGS, ids=str)

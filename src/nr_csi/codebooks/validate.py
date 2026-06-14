@@ -35,22 +35,47 @@ def _check_array(arr, name: str, shape: tuple[int, ...], lo: int, hi: int) -> No
 
 
 def validate_type1(cbk, pmi) -> None:
-    a = cbk.antenna
-    G1, G2 = a.n_beams
-    _check(pmi.rank in (1, 2), f"rank {pmi.rank} not in 1..2")
+    _check(1 <= pmi.rank <= min(8, cbk.antenna.P),
+           f"rank {pmi.rank} unsupported for P={cbk.antenna.P}")
     _check(pmi.mode == cbk.mode, f"mode {pmi.mode} != configured {cbk.mode}")
-    n11 = G1 if pmi.mode == 1 else G1 // 2
-    n12 = G2 if pmi.mode == 1 else max(G2 // 2, 1)
+    n11 = cbk._n_i11(pmi.rank)
+    n12 = cbk._n_i12(pmi.rank)
     _check(0 <= pmi.i11 < n11, f"i11={pmi.i11} not in [0, {n11})")
     _check(0 <= pmi.i12 < n12, f"i12={pmi.i12} not in [0, {n12})")
     n_i2 = cbk._n_i2(pmi.rank)
     _check_array(pmi.i2, "i2", (cbk.N3,), 0, n_i2 - 1)
-    if pmi.rank == 2:
-        from .type1 import i13_offsets
-
-        n_off = len(i13_offsets(a.N1, a.N2, a.O1, a.O2))
+    if pmi.rank in (2, 3, 4):
+        n_off = cbk._n_i13(pmi.rank)
         _check(pmi.i13 is not None and 0 <= pmi.i13 < n_off,
                f"i13={pmi.i13} not in [0, {n_off})")
+    else:
+        _check(pmi.i13 is None, f"i13 must not be reported for rank {pmi.rank}")
+
+
+def validate_type1_multipanel(cbk, pmi) -> None:
+    G1, G2 = cbk.antenna.n_beams
+    _check(1 <= pmi.rank <= 4, f"rank {pmi.rank} not in 1..4")
+    _check(pmi.mode == cbk.mode, f"mode {pmi.mode} != configured {cbk.mode}")
+    _check(0 <= pmi.i11 < G1, f"i11={pmi.i11} not in [0, {G1})")
+    _check(0 <= pmi.i12 < G2, f"i12={pmi.i12} not in [0, {G2})")
+    _check(isinstance(pmi.i14, tuple), "i14 must be a tuple")
+    _check(len(pmi.i14) == cbk._i14_shape()[0],
+           f"i14 length {len(pmi.i14)} != {cbk._i14_shape()[0]}")
+    _check(all(0 <= int(p) < 4 for p in pmi.i14), "i14 values outside [0, 3]")
+    if pmi.rank > 1:
+        n_off = cbk._n_i13(pmi.rank)
+        _check(pmi.i13 is not None and 0 <= pmi.i13 < n_off,
+               f"i13={pmi.i13} not in [0, {n_off})")
+    else:
+        _check(pmi.i13 is None, "i13 must not be reported for rank 1")
+    if cbk.mode == 1:
+        _check_array(pmi.i2, "i2", (cbk.N3,), 0, 3 if pmi.rank == 1 else 1)
+    else:
+        _check_array(pmi.i2, "i2", (cbk.N3, 3), 0, 3)
+        i2 = np.asarray(pmi.i2)
+        _check(bool(np.all(i2[:, 1:] <= 1)), "i2 panel phase values outside [0, 1]")
+        if pmi.rank > 1:
+            _check(bool(np.all(i2[:, 0] <= 1)), "i2 polarization phase outside [0, 1]")
 
 
 def _validate_spatial(cbk, pmi) -> None:

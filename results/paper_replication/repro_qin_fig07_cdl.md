@@ -6,7 +6,7 @@ Source: Qin & Yin, *A Review of Codebooks for CSI Feedback in 5G New Radio and B
 
 - Array: `AntennaConfig.standard(8, 2)` -> **P = 32** ports; N3 = 13.
 - **SU rank 2** (see *Why SU* below); reference SNR = 10 dB; 40 drops (seed 0, paired).
-- Channel: RandomRayChannel (2 rays) -- the base the PEB wrappers sit on. (The ray default uses 2 rays: the few-ray regime in which a PEB concentrates the channel onto few ports and so separates port-selection codebooks, same choice as `fig_09_port_selection.py`; CDL's concentration is whatever the model's cluster structure gives.)
+- Channel: Sionna 3GPP TR 38.901 CDL-C -- the base the PEB wrappers sit on. (The ray default uses 2 rays: the few-ray regime in which a PEB concentrates the channel onto few ports and so separates port-selection codebooks, same choice as `fig_09_port_selection.py`; CDL's concentration is whatever the model's cluster structure gives.)
 
 ## Why SU rank 2 instead of MU
 
@@ -27,13 +27,13 @@ The port-selection *ordering* is rank-insensitive, so SU rank 2 reproduces the p
 
 | curve | domain | overhead [bits] | SE | rel. gain [%] | SGCS |
 |---|---|---:|---:|---:|---:|
-| R15 Type I | antenna | 23 | 8.58 | 100.0 | 0.233 |
-| R16 eType II | antenna | 359 | 10.38 | 121.0 | 0.947 |
-| R16 eType II PS | tuned | 376 | 9.92 | 115.7 | 0.828 |
-| R17 FeType II PS (DFT) | beam | 286 | 10.22 | 119.1 | 0.883 |
-| R17 FeType II PS (eigen) | eigen | 150 | 10.37 | 120.9 | 0.926 |
+| R15 Type I | antenna | 23 | 12.20 | 100.0 | 0.207 |
+| R16 eType II | antenna | 483 | 13.94 | 114.3 | 0.885 |
+| R16 eType II PS | tuned | 473 | 13.76 | 112.8 | 0.833 |
+| R17 FeType II PS (DFT) | beam | 306 | 13.93 | 114.2 | 0.877 |
+| R17 FeType II PS (eigen) | eigen | 225 | 14.13 | 115.7 | 0.940 |
 
-**Ordering observed (by SE):** R16 eType II > R17 FeType II PS (eigen) > R17 FeType II PS (DFT) > R16 eType II PS > R15 Type I.
+**Ordering observed (by SE):** R17 FeType II PS (eigen) > R16 eType II > R17 FeType II PS (DFT) > R16 eType II PS > R15 Type I.
 
 This reproduces the paper's port-selection orderings: R17 FeType II PS (eigen) > (DFT); all port-selection / eType II curves beat R15 Type I; and R16 eType II PS clears Type I once it is on its applicable (PEB-ordered) deployment.  **The robust takeaway is the Pareto frontier**, not the y-ordering: R17 eigen PS reaches near-top gain at the *lowest* overhead (concentrating energy onto few ports leaves fewer nonzero coefficients to report), so it is Pareto-dominant -- cheaper and higher-fidelity.  R16 eType II PS on the tuned PEB edges out R16 eType II in raw gain, but the tuned PEB is a per-drop genie (upper bound) and R16 PS pays the most bits, so it is dominated on the frontier.  Regular R16 eType II stays competitive with R17 (it is a strong antenna-domain scheme); the paper places the PS curves a little higher -- a documented difference (its system simulator credits realistic gNB beamforming).
 
@@ -42,6 +42,6 @@ This reproduces the paper's port-selection orderings: R17 FeType II PS (eigen) >
 - **SU vs MU.** Forced by the two constraints above; the paper's Fig. 7 is MU-MIMO rank 2 at RU ~ 70%, we use SU rank-2 SE on the same drops.
 - **Eigen proxy.** `EigenBeamChannel` is a covariance-eigenvector PEB, an idealized stand-in for a gNB's eigen-based CSI-RS beamforming; the paper's eigen PS uses the realised beamformer of its system simulator.
 - **R16 PS deployment.** Shown on the tuned (energy-ordered) PEB, R16 PS's applicable scenario and a per-drop upper bound; on a plain DFT PEB it falls below Type I.  The paper's realistic gNB beamforming sits between these two bounds.
-- **Channel / scheduler.** RandomRayChannel (2 rays) vs the paper's system-level channel and proportional-fair RU~70% scheduler.
+- **Channel / scheduler.** Sionna 3GPP TR 38.901 CDL-C vs the paper's system-level channel and proportional-fair RU~70% scheduler.
 
 The goal is the *ordering and overhead spread*, not absolute %.

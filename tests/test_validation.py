@@ -71,9 +71,8 @@ class TestConstructorGuards:
         with pytest.raises(ValueError):
             R18Type2Codebook(ANT, N3=8, N4=3, param_combination=3)
 
-    def test_type1_mode2_needs_n2(self):
-        with pytest.raises(ValueError):
-            Type1Codebook(AntennaConfig.standard(8, 1), N3=4, mode=2)
+    def test_type1_mode2_n2_1_is_supported(self):
+        Type1Codebook(AntennaConfig.standard(8, 1), N3=4, mode=2)
 
 
 class TestChannelMismatch:
@@ -110,7 +109,7 @@ class TestChannelMismatch:
         rng = np.random.default_rng(0)
         H = random_channel(rng, 1, 4, n_rx=4)
         with pytest.raises(ValueError):
-            Type1Codebook(ANT, N3=4).select(H, rank=3)
+            Type1Codebook(ANT, N3=4).select(H, rank=9)
         with pytest.raises(ValueError):
             R15Type2Codebook(ANT, N3=4, L=2).select(H, rank=3)
         with pytest.raises(ValueError):

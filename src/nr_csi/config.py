@@ -4,6 +4,7 @@ The tables transcribed here come from the tutorial paper (paper/main.tex),
 which mirrors TS 38.214:
 
 * ``SUPPORTED_N1N2``      -- Table "Supported Configurations of (N1,N2) and (O1,O2)"
+* ``SUPPORTED_NG_N1N2``   -- TS 38.214 Table 5.2.2.2.2-1 (Type I multi-panel)
 * ``R16_PARAM_COMBOS``    -- Table "Parameter Configurations for L, beta, p_v"
                              (paramCombination-r16)
 * ``R17_PARAM_COMBOS``    -- Table "Parameter Configurations for alpha, M, beta"
@@ -35,13 +36,27 @@ SUPPORTED_N1N2: dict[tuple[int, int], tuple[int, int]] = {
     (16, 1): (4, 1),
 }
 
+# (Ng, N1, N2) -> (O1, O2), TS 38.214 Table 5.2.2.2.2-1.
+SUPPORTED_NG_N1N2: dict[tuple[int, int, int], tuple[int, int]] = {
+    (2, 2, 1): (4, 1),
+    (2, 4, 1): (4, 1),
+    (4, 2, 1): (4, 1),
+    (2, 2, 2): (4, 4),
+    (2, 8, 1): (4, 1),
+    (4, 4, 1): (4, 1),
+    (2, 4, 2): (4, 4),
+    (4, 2, 2): (4, 4),
+}
+
 
 @dataclass(frozen=True)
 class AntennaConfig:
     """Logical antenna array at the gNB (dual-polarized UPA).
 
-    N1/N2: number of ports per polarization in the horizontal/vertical
-    dimension. O1/O2: oversampling factors. P_CSI-RS = 2*N1*N2.
+    N1/N2: number of ports per polarization and panel in the
+    horizontal/vertical dimension. Ng: number of panels (1 for all
+    single-panel codebooks). O1/O2: oversampling factors.
+    P_CSI-RS = 2*Ng*N1*N2.
 
     ``strict=True`` enforces the (N1,N2)->(O1,O2) pairs supported by the
     standard; ``strict=False`` allows experimental geometries (e.g. the
@@ -53,25 +68,35 @@ class AntennaConfig:
     O1: int = 4
     O2: int = 1
     strict: bool = True
+    Ng: int = 1
 
     def __post_init__(self) -> None:
+        if min(self.N1, self.N2, self.O1, self.O2, self.Ng) < 1:
+            raise ValueError("antenna dimensions, oversampling factors, and Ng must be positive")
         if self.strict:
-            expected = SUPPORTED_N1N2.get((self.N1, self.N2))
+            if self.Ng == 1:
+                expected = SUPPORTED_N1N2.get((self.N1, self.N2))
+                key = f"(N1,N2)=({self.N1},{self.N2})"
+            else:
+                expected = SUPPORTED_NG_N1N2.get((self.Ng, self.N1, self.N2))
+                key = f"(Ng,N1,N2)=({self.Ng},{self.N1},{self.N2})"
             if expected is None:
                 raise ValueError(
-                    f"(N1,N2)=({self.N1},{self.N2}) is not a supported configuration; "
+                    f"{key} is not a supported configuration; "
                     f"use strict=False for experimental geometries"
                 )
             if (self.O1, self.O2) != expected:
                 raise ValueError(
                     f"(O1,O2)=({self.O1},{self.O2}) must be {expected} for "
-                    f"(N1,N2)=({self.N1},{self.N2})"
+                    f"{key}"
                 )
 
     @classmethod
-    def standard(cls, N1: int, N2: int) -> "AntennaConfig":
-        O1, O2 = SUPPORTED_N1N2[(N1, N2)]
-        return cls(N1=N1, N2=N2, O1=O1, O2=O2)
+    def standard(cls, N1: int, N2: int, Ng: int = 1) -> "AntennaConfig":
+        table = SUPPORTED_N1N2 if Ng == 1 else SUPPORTED_NG_N1N2
+        key = (N1, N2) if Ng == 1 else (Ng, N1, N2)
+        O1, O2 = table[key]
+        return cls(N1=N1, N2=N2, O1=O1, O2=O2, Ng=Ng)
 
     @property
     def n_ports_per_pol(self) -> int:
@@ -79,8 +104,8 @@ class AntennaConfig:
 
     @property
     def P(self) -> int:
-        """Number of CSI-RS ports, P_CSI-RS = 2*N1*N2 (dual polarization)."""
-        return 2 * self.N1 * self.N2
+        """Number of CSI-RS ports, P_CSI-RS = 2*Ng*N1*N2."""
+        return 2 * self.Ng * self.N1 * self.N2
 
     @property
     def n_beams(self) -> tuple[int, int]:

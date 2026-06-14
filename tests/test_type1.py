@@ -1,7 +1,6 @@
 """R15 Type I codebook anchors (paper Tables tabmode1, tabmode2, tabmap)."""
 
 import numpy as np
-import pytest
 
 from nr_csi.baselines import eigen_precoder
 from nr_csi.channel import Ray, SyntheticRayChannel
@@ -67,9 +66,14 @@ class TestReconstruction:
             seen.add(cb._beam_and_phase(pmi, 0))
         assert len(seen) == 16  # 4 beams x 4 co-phases, all distinct
 
-    def test_mode2_requires_n2_gt_1(self):
-        with pytest.raises(ValueError):
-            Type1Codebook(AntennaConfig.standard(8, 1), mode=2)
+    def test_mode2_n2_1_uses_four_horizontal_beams(self):
+        a = AntennaConfig.standard(8, 1)
+        cb = Type1Codebook(a, mode=2)
+        seen = set()
+        for i2 in range(16):
+            pmi = Type1PMI(rank=1, mode=2, i11=2, i12=0, i2=np.array([i2]))
+            seen.add(cb._beam_and_phase(pmi, 0))
+        assert seen == {(4 + offset, 0, phase) for offset in range(4) for phase in range(4)}
 
 
 class TestSelection:

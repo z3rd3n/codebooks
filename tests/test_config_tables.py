@@ -15,6 +15,7 @@ from nr_csi.config import (
     R18_PARAM_COMBOS,
     SUBBAND_SIZES,
     SUPPORTED_N1N2,
+    SUPPORTED_NG_N1N2,
     AntennaConfig,
     m_v,
 )
@@ -92,6 +93,20 @@ class TestTabNO:
         assert (ant.O1, ant.O2) == SUPPORTED_N1N2[(n1, n2)]
         assert ant.P == 2 * n1 * n2
         assert ant.P in TABNO
+
+
+def test_type1_multipanel_table_rows():
+    expected = {
+        (2, 2, 1): (4, 1),
+        (2, 4, 1): (4, 1),
+        (4, 2, 1): (4, 1),
+        (2, 2, 2): (4, 4),
+        (2, 8, 1): (4, 1),
+        (4, 4, 1): (4, 1),
+        (2, 4, 2): (4, 4),
+        (4, 2, 2): (4, 4),
+    }
+    assert SUPPORTED_NG_N1N2 == expected
 
 
 class TestParamComboTables:

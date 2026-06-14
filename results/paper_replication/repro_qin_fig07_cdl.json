@@ -8,54 +8,54 @@
   "snr_db": 10.0,
   "drops": 40,
   "seed": 0,
-  "channel": "RandomRayChannel (2 rays)"
+  "channel": "Sionna 3GPP TR 38.901 CDL-C"
  },
- "baseline_se": 8.577243038858189,
+ "baseline_se": 12.203507225273832,
  "points": [
   {
    "label": "R15 Type I",
    "family": "R15 Type I",
    "domain": "antenna",
    "bits": 23.0,
-   "se": 8.577243038858189,
-   "sgcs": 0.23323206687127299,
+   "se": 12.203507225273832,
+   "sgcs": 0.20672454883061256,
    "gain": 100.0
   },
   {
    "label": "R16 eType II",
    "family": "R16 eType II",
    "domain": "antenna",
-   "bits": 358.75,
-   "se": 10.38162411927606,
-   "sgcs": 0.9468217776958916,
-   "gain": 121.03684216762116
+   "bits": 482.65,
+   "se": 13.944594332751857,
+   "sgcs": 0.8851357429081311,
+   "gain": 114.2671043277803
   },
   {
    "label": "R16 eType II PS",
    "family": "R16 eType II PS",
    "domain": "tuned",
-   "bits": 376.45,
-   "se": 9.924827907310746,
-   "sgcs": 0.8276363240887177,
-   "gain": 115.71116572478456
+   "bits": 473.05,
+   "se": 13.762480097974777,
+   "sgcs": 0.8327496916151709,
+   "gain": 112.7747937041596
   },
   {
    "label": "R17 FeType II PS (DFT)",
    "family": "R17 FeType II PS",
    "domain": "beam",
-   "bits": 286.3,
-   "se": 10.216392716004925,
-   "sgcs": 0.8834458754125908,
-   "gain": 119.11044924016682
+   "bits": 306.425,
+   "se": 13.931285937437291,
+   "sgcs": 0.8768174044943755,
+   "gain": 114.15805047081201
   },
   {
    "label": "R17 FeType II PS (eigen)",
    "family": "R17 FeType II PS",
    "domain": "eigen",
-   "bits": 149.625,
-   "se": 10.371143851435837,
-   "sgcs": 0.9261473059733302,
-   "gain": 120.91465526219315
+   "bits": 225.225,
+   "se": 14.125273401431931,
+   "sgcs": 0.9402514718366405,
+   "gain": 115.74765467568261
   }
  ]
 }

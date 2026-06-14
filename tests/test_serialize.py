@@ -16,6 +16,7 @@ from nr_csi.codebooks import (
     R17Type2Codebook,
     R18Type2Codebook,
     Type1Codebook,
+    Type1MultiPanelCodebook,
 )
 from nr_csi.codebooks.serialize import pack, unpack
 from nr_csi.config import AntennaConfig
@@ -44,8 +45,13 @@ def pmi_fields_equal(a, b) -> bool:
 
 
 SCHEMES = [
-    ("type1-mode1", lambda: Type1Codebook(ANT, N3=4), (1, 2)),
-    ("type1-mode2", lambda: Type1Codebook(ANT, N3=4, mode=2), (1, 2)),
+    ("type1-mode1", lambda: Type1Codebook(ANT, N3=4), tuple(range(1, 9))),
+    ("type1-mode2", lambda: Type1Codebook(ANT, N3=4, mode=2), tuple(range(1, 9))),
+    (
+        "type1-mp-mode1",
+        lambda: Type1MultiPanelCodebook(AntennaConfig.standard(2, 1, Ng=2), N3=4),
+        (1, 2, 3, 4),
+    ),
     ("r15", lambda: R15Type2Codebook(ANT, N3=4, L=3), (1, 2)),
     ("r15-sa", lambda: R15Type2Codebook(ANT, N3=3, L=4, subband_amplitude=True), (1, 2)),
     ("r15-qpsk", lambda: R15Type2Codebook(ANT, N3=4, L=2, n_psk=4), (1, 2)),
@@ -70,7 +76,7 @@ def test_round_trip_and_bit_count(name, make, ranks):
     for rank in ranks:
         for seed in (0, 1, 2):
             rng = np.random.default_rng(100 * seed + rank)
-            H = random_channel(rng, n_slots, cbk.N3)
+            H = random_channel(rng, n_slots, cbk.N3, P=cbk.antenna.P)
             pmi = cbk.select(H, rank=rank)
             bits = pack(cbk, pmi)
             assert set(bits) <= {"0", "1"}

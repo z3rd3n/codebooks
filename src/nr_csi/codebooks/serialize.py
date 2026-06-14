@@ -78,34 +78,68 @@ def _require_done(reader: BitReader) -> None:
 # ---------------------------------------------------------------------------
 
 def pack_type1(cbk, pmi) -> str:
-    from .type1 import i13_offsets
-
-    a = cbk.antenna
-    G1, G2 = a.n_beams
-    div = 2 if cbk.mode == 2 else 1
     w = BitWriter()
-    w.write(pmi.i11, _w(max(G1 // div, 1)))
-    w.write(pmi.i12, _w(max(G2 // div, 1)))
-    if pmi.rank == 2:
-        w.write(pmi.i13, _w(len(i13_offsets(a.N1, a.N2, a.O1, a.O2))))
+    w.write(pmi.i11, _w(cbk._n_i11(pmi.rank)))
+    if cbk.antenna.N2 > 1:
+        w.write(pmi.i12, _w(cbk._n_i12(pmi.rank)))
+    if pmi.rank in (2, 3, 4):
+        w.write(pmi.i13, _w(cbk._n_i13(pmi.rank)))
     for t in range(cbk.N3):
         w.write(int(pmi.i2[t]), _w(cbk._n_i2(pmi.rank)))
     return w.getvalue()
 
 
 def unpack_type1(cbk, bits: str, rank: int):
-    from .type1 import Type1PMI, i13_offsets
+    from .type1 import Type1PMI
 
-    a = cbk.antenna
-    G1, G2 = a.n_beams
-    div = 2 if cbk.mode == 2 else 1
     r = BitReader(bits)
-    i11 = r.read(_w(max(G1 // div, 1)))
-    i12 = r.read(_w(max(G2 // div, 1)))
-    i13 = r.read(_w(len(i13_offsets(a.N1, a.N2, a.O1, a.O2)))) if rank == 2 else None
+    i11 = r.read(_w(cbk._n_i11(rank)))
+    i12 = r.read(_w(cbk._n_i12(rank))) if cbk.antenna.N2 > 1 else 0
+    i13 = r.read(_w(cbk._n_i13(rank))) if rank in (2, 3, 4) else None
     i2 = np.array([r.read(_w(cbk._n_i2(rank))) for _ in range(cbk.N3)])
     _require_done(r)
     return Type1PMI(rank=rank, mode=cbk.mode, i11=i11, i12=i12, i2=i2, i13=i13)
+
+
+def pack_type1_multipanel(cbk, pmi) -> str:
+    G1, G2 = cbk.antenna.n_beams
+    w = BitWriter()
+    w.write(pmi.i11, _w(G1))
+    if cbk.antenna.N2 > 1:
+        w.write(pmi.i12, _w(G2))
+    if pmi.rank > 1:
+        w.write(pmi.i13, _w(cbk._n_i13(pmi.rank)))
+    for phase in pmi.i14:
+        w.write(phase, 2)
+    if cbk.mode == 1:
+        width = 2 if pmi.rank == 1 else 1
+        for value in pmi.i2:
+            w.write(value, width)
+    else:
+        widths = (2 if pmi.rank == 1 else 1, 1, 1)
+        for state in pmi.i2:
+            for value, width in zip(state, widths):
+                w.write(value, width)
+    return w.getvalue()
+
+
+def unpack_type1_multipanel(cbk, bits: str, rank: int):
+    from .type1_multipanel import Type1MPPMI
+
+    G1, G2 = cbk.antenna.n_beams
+    r = BitReader(bits)
+    i11 = r.read(_w(G1))
+    i12 = r.read(_w(G2)) if cbk.antenna.N2 > 1 else 0
+    i13 = r.read(_w(cbk._n_i13(rank))) if rank > 1 else None
+    i14 = tuple(r.read(2) for _ in range(cbk._i14_shape()[0]))
+    if cbk.mode == 1:
+        width = 2 if rank == 1 else 1
+        i2 = np.array([r.read(width) for _ in range(cbk.N3)])
+    else:
+        widths = (2 if rank == 1 else 1, 1, 1)
+        i2 = np.array([[r.read(width) for width in widths] for _ in range(cbk.N3)])
+    _require_done(r)
+    return Type1MPPMI(rank, cbk.mode, i11, i12, i14, i2, i13)
 
 
 # ---------------------------------------------------------------------------
@@ -415,10 +449,13 @@ def pack(cbk, pmi) -> str:
     from .etype2_r18 import R18Type2Codebook
     from .fetype2_r17 import R17Type2Codebook
     from .type1 import Type1Codebook
+    from .type1_multipanel import Type1MultiPanelCodebook
     from .type2_r15 import R15Type2Codebook
 
     if isinstance(cbk, Type1Codebook):
         return pack_type1(cbk, pmi)
+    if isinstance(cbk, Type1MultiPanelCodebook):
+        return pack_type1_multipanel(cbk, pmi)
     if isinstance(cbk, R15Type2Codebook):
         return pack_r15(cbk, pmi)
     if isinstance(cbk, R18Type2Codebook):
@@ -435,10 +472,13 @@ def unpack(cbk, bits: str, rank: int):
     from .etype2_r18 import R18Type2Codebook
     from .fetype2_r17 import R17Type2Codebook
     from .type1 import Type1Codebook
+    from .type1_multipanel import Type1MultiPanelCodebook
     from .type2_r15 import R15Type2Codebook
 
     if isinstance(cbk, Type1Codebook):
         return unpack_type1(cbk, bits, rank)
+    if isinstance(cbk, Type1MultiPanelCodebook):
+        return unpack_type1_multipanel(cbk, bits, rank)
     if isinstance(cbk, R15Type2Codebook):
         return unpack_r15(cbk, bits, rank)
     if isinstance(cbk, R18Type2Codebook):

@@ -35,10 +35,20 @@ fig_09 domain machinery:
   no-op for R17's order-invariant free port selection).  Both PEBs are
   unitary per polarization, so SE/SGCS stay directly comparable.
 
+Channel: ``--channel ray`` (default) is the synthetic 2-ray
+``RandomRayChannel``; ``--channel cdl`` swaps in a Sionna 3GPP TR 38.901 CDL
+channel (``--model``, default C) via ``cdllib.CDLReplay``.  The PEB wrappers
+(beam / tuned / eigen) sit on top of whichever base channel is chosen; CDL
+drops are TF-driven, so the base bank is rewound (``reset()``) before every
+scheme to keep the five curves paired.
+
 Run: python scripts/repro_qin_fig07_ps_overhead.py --out results/paper_replication
+     python scripts/repro_qin_fig07_ps_overhead.py --channel cdl --model C ...
 """
 
 from __future__ import annotations
+
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -111,14 +121,44 @@ def wrap(base: ChannelSource, domain: str) -> ChannelSource:
     return base  # antenna
 
 
-def main() -> None:
-    args = cli(__doc__, drops=40)
+def _pop_opt(flag: str, default: str | None = None) -> str | None:
+    """Consume ``--flag value`` from argv before figlib's parser sees it."""
+    if flag in sys.argv:
+        k = sys.argv.index(flag)
+        val = sys.argv[k + 1]
+        del sys.argv[k:k + 2]
+        return val
+    return default
+
+
+def build_base(kind: str, model: str, args):
+    """(base channel, human label, output-name suffix) for the requested source.
+
+    The PEB wrappers (beam/tuned/eigen) wrap this base, so resetting the base
+    (CDLReplay) before each scheme keeps every wrapped view paired.
+    """
+    if kind == "cdl":
+        from cdllib import DS, INTERVAL, SPEED, CDLReplay
+
+        chan = CDLReplay(ANT, N3, n_rx=2, speed=SPEED, delay_spread=DS,
+                         interval=INTERVAL, model=model, seed=args.seed, slots=1)
+        return chan, f"Sionna 3GPP TR 38.901 CDL-{model}", "_cdl"
     # few rays: the PEB concentrates the channel onto few ports, the regime
     # that separates port-selection codebooks (cf. fig_09_port_selection.py)
-    base = RandomRayChannel(ANT, N3=N3, n_rx=2, n_paths=2, max_delay=3.0)
+    chan = RandomRayChannel(ANT, N3=N3, n_rx=2, n_paths=2, max_delay=3.0)
+    return chan, "RandomRayChannel (2 rays)", ""
+
+
+def main() -> None:
+    kind = (_pop_opt("--channel", "ray") or "ray").lower()
+    model = _pop_opt("--model", "C") or "C"
+    args = cli(__doc__, drops=40)
+    base, chan_label, suffix = build_base(kind, model, args)
     rows = []
     base_se = None
     for scheme, domain, label in schemes():
+        if hasattr(base, "reset"):  # rewind CDL bank -> every scheme paired
+            base.reset()
         res = evaluate(scheme, wrap(base, domain), snr_db=[SNR_REF_DB], rank=RANK,
                        n_drops=args.drops, rng=np.random.default_rng(args.seed))
         se = res.se[0]
@@ -148,18 +188,20 @@ def main() -> None:
     ax.legend(fontsize=8, loc="lower right")
     ax.set_title(
         f"Repro of review Fig. 7 -- port-selection gain vs overhead\n"
-        f"SU rank {RANK}, P=32 (8,2), N3={N3}, 2-ray, {SNR_REF_DB:.0f} dB, "
-        f"{args.drops} drops (hollow = gNB-adapted PEB; eigen = covariance PEB)"
+        f"SU rank {RANK}, P=32 (8,2), N3={N3}, {SNR_REF_DB:.0f} dB, "
+        f"{args.drops} drops (hollow = gNB-adapted PEB; eigen = covariance PEB)\n"
+        f"channel: {chan_label}"
     )
-    save(fig, args.out, "repro_qin_fig07", {
+    save(fig, args.out, f"repro_qin_fig07{suffix}", {
         "operating_point": dict(P=ANT.P, N1=ANT.N1, N2=ANT.N2, N3=N3, rank=RANK,
-                                snr_db=SNR_REF_DB, drops=args.drops, seed=args.seed),
+                                snr_db=SNR_REF_DB, drops=args.drops, seed=args.seed,
+                                channel=chan_label),
         "baseline_se": base_se, "points": rows,
     })
-    _write_md(args, rows)
+    _write_md(args, rows, chan_label, suffix)
 
 
-def _write_md(args, rows) -> None:
+def _write_md(args, rows, chan_label: str, suffix: str) -> None:
     order = " > ".join(r["label"] for r in sorted(rows, key=lambda r: -r["se"]))
     lines = [
         "# Repro: review Fig. 7 -- port-selection relative gain vs overhead",
@@ -172,9 +214,11 @@ def _write_md(args, rows) -> None:
         f"- Array: `AntennaConfig.standard(8, 2)` -> **P = 32** ports; N3 = {N3}.",
         f"- **SU rank {RANK}** (see *Why SU* below); reference SNR = "
         f"{SNR_REF_DB:.0f} dB; {args.drops} drops (seed {args.seed}, paired).",
-        "- Channel: `RandomRayChannel`, 2 rays -- the few-ray regime in which a "
-        "PEB concentrates the channel onto few ports and so separates "
-        "port-selection codebooks (same choice as `fig_09_port_selection.py`).",
+        f"- Channel: {chan_label} -- the base the PEB wrappers sit on. (The ray "
+        "default uses 2 rays: the few-ray regime in which a PEB concentrates the "
+        "channel onto few ports and so separates port-selection codebooks, same "
+        "choice as `fig_09_port_selection.py`; CDL's concentration is whatever "
+        "the model's cluster structure gives.)",
         "",
         "## Why SU rank 2 instead of MU",
         "",
@@ -247,12 +291,12 @@ def _write_md(args, rows) -> None:
         "PS's applicable scenario and a per-drop upper bound; on a plain DFT PEB "
         "it falls below Type I.  The paper's realistic gNB beamforming sits "
         "between these two bounds.",
-        "- **Channel / scheduler.** `RandomRayChannel` (2 rays) vs the paper's "
-        "system-level channel and proportional-fair RU~70% scheduler.",
+        f"- **Channel / scheduler.** {chan_label} vs the paper's system-level "
+        "channel and proportional-fair RU~70% scheduler.",
         "",
         "The goal is the *ordering and overhead spread*, not absolute %.",
     ]
-    (args.out / "repro_qin_fig07.md").write_text("\n".join(lines) + "\n")
+    (args.out / f"repro_qin_fig07{suffix}.md").write_text("\n".join(lines) + "\n")
 
 
 if __name__ == "__main__":

@@ -4,19 +4,21 @@ NumPy implementations of the 5G NR beamforming codebooks, built as a
 trustworthy baseline set for comparing learned (ML) CSI feedback algorithms
 against the standardized ones under identical channels and metrics.
 
-The authoritative source is the tutorial paper in `paper/main.tex`
-(*"Precoding Matrix Indicator in the 5G NR Protocol: A Tutorial on 3GPP
-Beamforming Codebooks"*), which mirrors TS 38.214 §5.2.2.2.
+The authoritative sources are TS 38.214 §5.2.2.2 and the tutorial paper in
+`paper/main.tex` (*"Precoding Matrix Indicator in the 5G NR Protocol: A
+Tutorial on 3GPP Beamforming Codebooks"*).
 
 ## Implemented codebooks
 
 | Class | Codebook | Compression | Ranks |
 |---|---|---|---|
-| `Type1Codebook` | R15 Type I single-panel, Modes 1–2 | beam + co-phasing | 1–2 |
+| `Type1Codebook` | R15 Type I single-panel, Modes 1–2 | beam + co-phasing | 1–8 |
+| `Type1MultiPanelCodebook` | R15 Type I multi-panel, Modes 1–2 | beam + panel/polarization co-phasing | 1–4 |
 | `R15Type2Codebook` | R15 Type II (+ port-selection variant) | spatial (L beams) | 1–2 |
 | `R16Type2Codebook` | R16 eType II (+ PS variant) | spatial + delay (M_v taps) | 1–4 |
 | `R17Type2Codebook` | R17 FeType II port-selection | free ports + M taps | 1–4 |
 | `R18Type2Codebook` | R18 eType II Doppler (predicted PMI) | spatial + delay + Doppler (Q shifts over N₄ intervals) | 1–4 |
+| `R18PredictedPortSelectionCodebook` | R18 FeType II PS predicted PMI (N₄=1) | free ports + M taps | 1–4 |
 
 Each codebook implements the same interface (`nr_csi.codebooks.base.CodebookScheme`):
 
@@ -151,9 +153,11 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
 
 ## Conventions
 
-* Channels: `H[slot, t, rx, port]`, `t = 0..N3-1` PMI frequency units;
-  port index = `pol * N1*N2 + n1*N2 + n2` (vertical fastest), matching the
-  Kronecker spatial bases `v_{m1,m2} = a_{m1} ⊗ u_{m2}`.
+* Channels: `H[slot, t, rx, port]`, `t = 0..N3-1` PMI frequency units.
+  Single-panel port order is polarization-major. Type I multi-panel follows
+  the spec matrix order: panel-major, with the two polarization blocks for
+  each panel adjacent. Spatial beams use vertical-fastest Kronecker order
+  `v_{m1,m2} = a_{m1} ⊗ u_{m2}`.
 * Precoders: `W[interval, t, port, layer]` with `tr(WᴴW) = 1` per `(interval, t)`.
 * The synthetic ray channel (`channel.synthetic`) uses `H = g · a_rx v_txᴴ`,
   so an on-grid codebook beam is exactly the optimal precoder — handy for
@@ -195,8 +199,9 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
 5. **R16 PS parameter table** (TS 38.214 Table 5.2.2.2.6-1) is referenced but
    not transcribed in the paper; the regular `paramCombination-r16` table is
    reused for the PS variant here.
-6. Type I ranks 3–8 need TS 38.214 tables that the paper does not include;
-   they are out of scope (extension hooks in `codebooks/type1.py`).
+6. The paper omits the Type I rank 3–8 and multi-panel matrix tables. These
+   implementations are transcribed directly from TS 38.214 §5.2.2.2.1/2
+   and pinned by independent closed-form tests.
 7. **R18's coefficient budget K₀ = ⌈2βLM₁Q⌉ carries the Q = 2 Doppler
    factor** (spec-faithful, not a bug): on a *static* channel the idle
    Doppler bin donates its half of the budget to the DC bin, so R18 at
@@ -215,7 +220,8 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
 | Eq. vmm / beamv (spatial DFT bases), y_f, z_τ | `utils.dft` | `test_dft_bases.py` |
 | Algorithms 1–4 (combinatorial codecs) | `utils.combinatorics` | `test_combinatorics.py` |
 | Tables tabk1 / tabk2 / tabmapkuan / tabmapzhai | `utils.quantization` | `test_quantization.py`, `test_compression_properties.py::TestQuantizerDistortionBounds` |
-| Tables tabmode1/tabmode2 + tabmap (Type I) | `codebooks.type1` | `test_type1.py` |
+| TS 38.214 Tables 5.2.2.2.1-3…-12 (Type I single-panel) | `codebooks.type1` | `test_type1.py`, `test_type1_higher_ranks.py` |
+| TS 38.214 Tables 5.2.2.2.2-1…-6 (Type I multi-panel) | `codebooks.type1_multipanel` | `test_type1_multipanel.py` |
 | Eq. a46 + Table tabtypeii (R15 Type II), SA rules | `codebooks.type2_r15` | `test_type2_r15.py` |
 | Eqs. a58/a59 + Table tabmaxap (subset restriction) | `codebooks.type2_r15.TypeIIRestriction` | `test_restrictions_and_harness.py::TestSubsetRestriction` |
 | RI restriction (Type I 8-bit r; r18 4-bit) | `type1`/`etype2_r18` `rank/ri_restriction` | `test_restrictions_and_harness.py::TestRankRestriction` |
@@ -223,6 +229,7 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
 | Table tabesps + eq. a86 (R16 PS), eq. psy ≡ regy | `etype2_r16(port_selection=True)` | `test_equivalences.py::TestR16PortSelectionPEB` |
 | Table tabfesp + eq. a104 (R17), Algorithm 4 errata | `codebooks.fetype2_r17` | `test_fetype2_r17.py`, `test_equivalences.py::TestR17VsR16PS` |
 | Table tab1 + eq. a127 (R18 Doppler), N4=1 ≡ R16 | `codebooks.etype2_r18` | `test_etype2_r18.py`, `test_compression_properties.py::TestR18N4Sweep` |
+| TS 38.214 §5.2.2.2.11, N4=1 ≡ R17 FeType II PS | `codebooks.predicted_ps_r18` | `test_predicted_ps.py` |
 | PMI compositions (a85/a86/a104/a127 + R15/Type I) | each codebook's `overhead_bits` | `test_pmi_composition.py` |
 | Compact/Tucker models (Sec. "Compact Model") | `codebooks.compact` | `test_type1.py`/`test_type2_r15.py`/`test_etype2_r16.py`/`test_etype2_r18.py` `TestCompactModel` rows |
 | Tables bit1/bit2 (overhead formulas) | `metrics.overhead` | `test_overhead.py` (incl. frozen golden dicts) |
@@ -235,9 +242,8 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
 | 38.901 CDL channels (Sionna), port mapping | `channel.sionna_adapter` | `test_sionna_integration.py` (`-m sionna`) |
 
 Out of scope (documented): CSI-RS resource mapping / Gold sequences (paper
-Appendices B–C, orthogonal to the codebooks), Type I multi-panel and ranks
-3–8 (Modes 1–2; tables not in the paper), R19 (future phase), exact f2 bar
-heights (erratum 4).
+Appendices B–C, orthogonal to the codebooks), R18 CJT codebooks in
+§5.2.2.2.8/9, R19 (future phase), and exact f2 bar heights (erratum 4).
 
 ## Layout
 

@@ -27,7 +27,7 @@ from math import comb
 
 import numpy as np
 
-from ..config import R16_PARAM_COMBOS, AntennaConfig, m_v
+from ..config import R16_PARAM_COMBOS, AntennaConfig, R16ParamCombo, m_v
 from ..utils import combinatorics as cb
 from ..utils import dft
 from ..utils import quantization as qt
@@ -107,13 +107,18 @@ class R16Type2Codebook(CodebookScheme):
         R: int = 1,
         port_selection: bool = False,
         d: int = 1,
+        combo: R16ParamCombo | None = None,
     ) -> None:
         self.antenna = antenna
         self.N3 = N3
         if R not in (1, 2):
             raise ValueError("R must be 1 or 2")
         self.R = R
-        self.combo = R16_PARAM_COMBOS[param_combination]
+        # ``combo`` overrides the standardized paramCombination-r16 table for
+        # generalized (L, p_v, beta) sweeps -- e.g. holding (L, M_v) fixed
+        # while varying beta past the eight spec rows (used by the Qin Fig. 5
+        # reproduction).  Default behaviour is unchanged: look up the spec row.
+        self.combo = combo if combo is not None else R16_PARAM_COMBOS[param_combination]
         self.L = self.combo.L
         self.port_selection = port_selection
         if port_selection and not (1 <= d <= 4 and d <= min(antenna.P // 2, self.L)):
