@@ -48,6 +48,17 @@ SUPPORTED_NG_N1N2: dict[tuple[int, int, int], tuple[int, int]] = {
     (4, 2, 2): (4, 4),
 }
 
+# (N1, N2) -> (O1, O2) for the Release-19 large arrays (48/64/128 ports),
+# TS 38.214 Table 5.2.2.2.1a-1; O1 = O2 = 4 throughout.
+SUPPORTED_N1N2_R19: dict[tuple[int, int], tuple[int, int]] = {
+    (8, 3): (4, 4),   # 48 ports
+    (6, 4): (4, 4),   # 48 ports
+    (16, 2): (4, 4),  # 64 ports
+    (8, 4): (4, 4),   # 64 ports
+    (16, 4): (4, 4),  # 128 ports
+    (8, 8): (4, 4),   # 128 ports
+}
+
 
 @dataclass(frozen=True)
 class AntennaConfig:
@@ -75,7 +86,7 @@ class AntennaConfig:
             raise ValueError("antenna dimensions, oversampling factors, and Ng must be positive")
         if self.strict:
             if self.Ng == 1:
-                expected = SUPPORTED_N1N2.get((self.N1, self.N2))
+                expected = {**SUPPORTED_N1N2, **SUPPORTED_N1N2_R19}.get((self.N1, self.N2))
                 key = f"(N1,N2)=({self.N1},{self.N2})"
             else:
                 expected = SUPPORTED_NG_N1N2.get((self.Ng, self.N1, self.N2))
@@ -93,7 +104,7 @@ class AntennaConfig:
 
     @classmethod
     def standard(cls, N1: int, N2: int, Ng: int = 1) -> "AntennaConfig":
-        table = SUPPORTED_N1N2 if Ng == 1 else SUPPORTED_NG_N1N2
+        table = {**SUPPORTED_N1N2, **SUPPORTED_N1N2_R19} if Ng == 1 else SUPPORTED_NG_N1N2
         key = (N1, N2) if Ng == 1 else (Ng, N1, N2)
         O1, O2 = table[key]
         return cls(N1=N1, N2=N2, O1=O1, O2=O2, Ng=Ng)
@@ -179,6 +190,14 @@ R16_PARAM_COMBOS: dict[int, R16ParamCombo] = {
         R16ParamCombo(7, 6, Fraction(1, 4), None, Fraction(1, 2)),
         R16ParamCombo(8, 6, Fraction(1, 4), None, Fraction(3, 4)),
     ]
+}
+
+# paramCombination-r16 for the Enhanced Type II *Port-Selection* codebook,
+# TS 38.214 Table 5.2.2.2.6-1.  Identical to rows 1-6 of R16_PARAM_COMBOS but
+# the L=6 rows (7, 8) are NOT supported for port selection (the spec also
+# requires d <= L).
+R16_PS_PARAM_COMBOS: dict[int, R16ParamCombo] = {
+    i: R16_PARAM_COMBOS[i] for i in range(1, 7)
 }
 
 

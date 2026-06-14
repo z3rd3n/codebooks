@@ -30,7 +30,12 @@ import pytest
 from nr_csi.codebooks.etype2_r16 import R16Type2Codebook, decode_i18, encode_i18
 from nr_csi.codebooks.etype2_r18 import R18Type2Codebook
 from nr_csi.codebooks.fetype2_r17 import R17Type2Codebook
-from nr_csi.codebooks.type1 import i13_offsets, i13_offsets_rank34
+from nr_csi.codebooks.type1 import (
+    Type1Codebook,
+    Type1PMI,
+    i13_offsets,
+    i13_offsets_rank34,
+)
 from nr_csi.codebooks.type1_multipanel import i13_offsets_multipanel_rank34
 from nr_csi.codebooks.type2_r15 import R15Type2Codebook, k2_cap
 from nr_csi.config import (
@@ -42,6 +47,7 @@ from nr_csi.config import (
     AntennaConfig,
     m_v,
 )
+from nr_csi.utils import dft
 from nr_csi.utils import quantization as qt
 
 # ---------------------------------------------------------------------------
@@ -128,6 +134,88 @@ def test_table_5_2_2_2_1_4_only_lists_below_16_ports():
 
 
 # ---------------------------------------------------------------------------
+# Type I single-panel -- master quantity definitions (image180, j30 line 5535)
+# and the rank 1-8 precoder matrices W^(v) (Tables 5.2.2.2.1-5 .. -12).
+# All read off the rendered equation images and confirmed below.
+# ---------------------------------------------------------------------------
+
+
+def test_type1_master_quantity_definitions():
+    """TS 38.214 5.2.2.2.1 (image180): phi_n = e^{j pi n/2}; theta_p = e^{j pi
+    p/4}; the half-beam ~v_{l,m} uses the N1/2 horizontal DFT with phase
+    e^{j 4 pi l k/(O1 N1)} = e^{j 2 pi l k/(O1 (N1/2))}."""
+    ant = AntennaConfig.standard(4, 2)
+    N1, O1 = ant.N1, ant.O1
+    # phi_n co-phasing alphabet (n in {0,1,2,3}).
+    for n in range(4):
+        assert np.isclose(np.exp(1j * np.pi * n / 2), 1j**n)
+    # ~v_{l,m} horizontal taps for several beam indices l.
+    for l in range(N1 * O1):
+        half = dft.steering(N1 // 2, O1, l)
+        spec = np.exp(1j * 4 * np.pi * l * np.arange(N1 // 2) / (O1 * N1))
+        assert np.allclose(half, spec), f"l={l}"
+
+
+def test_type1_theta_p_rotation_in_rank3_large():
+    """TS 38.214 5.2.2.2.1: for >=16 ports the rank-3/4 codebook rotates the
+    second N1/2 sub-panel by theta_p = e^{j pi p/4}, indexed by i_{1,3}=p."""
+    cb = Type1Codebook(AntennaConfig.standard(4, 2), N3=1, mode=1)  # P=16
+    blk = slice(16 // 4, 16 // 2)  # the theta-carrying sub-panel rows
+    W0 = cb.precoder(Type1PMI(3, 1, 0, 0, np.array([0]), i13=0))[0, 0]
+    W1 = cb.precoder(Type1PMI(3, 1, 0, 0, np.array([0]), i13=1))[0, 0]
+    ratio = W1[blk, 0] / W0[blk, 0]
+    assert np.allclose(ratio, np.exp(1j * np.pi / 4))
+
+
+def _type1_min_pmi(rank):
+    i13 = 0 if rank in (2, 3, 4) else None
+    return Type1PMI(rank, 1, 0, 0, np.array([0]), i13)
+
+
+@pytest.mark.parametrize("rank", range(1, 9))
+def test_type1_precoder_orthonormal_all_ranks(rank):
+    """The Type I precoder W^(v) has v mutually-orthogonal columns each of norm
+    1/sqrt(v) (spec 1/sqrt(v P_CSI-RS) normalisation with norm-sqrt(P) beams),
+    so W^H W = I_v / v and tr(W^H W) = 1.  Checked for every rank 1..8."""
+    cb = Type1Codebook(AntennaConfig.standard(4, 2), N3=1, mode=1)
+    W = cb.precoder(_type1_min_pmi(rank))[0, 0]  # (P, rank)
+    gram = W.conj().T @ W
+    assert np.allclose(gram, np.eye(rank) / rank)
+    assert np.isclose(np.real(np.trace(gram)), 1.0)
+
+
+@pytest.mark.parametrize(
+    "rank,n2_eq_1_offsets,n2_gt_1_offsets",
+    [
+        # Tables 5.2.2.2.1-9/-10 (v=5,6): 3 beams.  # OCR image333/image337.
+        (5, [(0, 0), (1, 0), (2, 0)], [(0, 0), (1, 0), (1, 1)]),
+        (6, [(0, 0), (1, 0), (2, 0)], [(0, 0), (1, 0), (1, 1)]),
+        # Tables 5.2.2.2.1-11/-12 (v=7,8): 4 beams.  # OCR image348/image355.
+        (7, [(0, 0), (1, 0), (2, 0), (3, 0)], [(0, 0), (1, 0), (0, 1), (1, 1)]),
+        (8, [(0, 0), (1, 0), (2, 0), (3, 0)], [(0, 0), (1, 0), (0, 1), (1, 1)]),
+    ],
+)
+def test_type1_rank5to8_fixed_beam_offsets(rank, n2_eq_1_offsets, n2_gt_1_offsets):
+    """Rank 5-8 use a *fixed* set of orthogonal DFT beams at (q1*O1, q2*O2)
+    offsets from (i_{1,1}, i_{1,2}) -- there is no i_{1,3} for these ranks.
+    Offsets transcribed (OCR) from the W^(v) subscripts in Tables
+    5.2.2.2.1-9..12; here expressed as (multiples of O1, multiples of O2)."""
+    from nr_csi.codebooks.type1 import Type1Codebook as _T1
+
+    # N2 = 1 geometry (e.g. (8,1)) and N2 > 1 geometry (e.g. (4,2)).
+    for n1, n2, offs in [(8, 1, n2_eq_1_offsets), (4, 2, n2_gt_1_offsets)]:
+        ant = AntennaConfig.standard(n1, n2)
+        cb = _T1(ant, N3=1, mode=1)
+        l, m = 1, (0 if n2 == 1 else 1)  # arbitrary base beam
+        expected = [(l + a * ant.O1, m + b * ant.O2) for a, b in offs]
+        got = cb._fixed_beams(rank, l, m)
+        want = [dft.spatial_beam(ant, a, b) for a, b in expected]
+        assert len(got) == len(want)
+        for g, w in zip(got, want):
+            assert np.allclose(g, w)
+
+
+# ---------------------------------------------------------------------------
 # Type I multi-panel -- Table 5.2.2.2.2-1 (supported (Ng,N1,N2) -> (O1,O2))
 # and Table 5.2.2.2.2-2 (rank-3/4 offsets).  Both transcribed from j30.
 # ---------------------------------------------------------------------------
@@ -168,6 +256,58 @@ def test_table_5_2_2_2_2_2_multipanel_rank34_offsets(n1, n2):
         i13_offsets_multipanel_rank34(n1, n2, O1, O2)
         == SPEC_TABLE_5_2_2_2_2_2[(n1, n2)](O1, O2)
     )
+
+
+def _mp_pmi(mode, rank, Ng):
+    from nr_csi.codebooks.type1_multipanel import Type1MPPMI
+
+    i14 = (0,) * (Ng - 1) if mode == 1 else (0, 0)
+    i2 = np.array([0]) if mode == 1 else np.array([[0, 0, 0]])
+    return Type1MPPMI(rank, mode, 0, 0, i14, i2, 0 if rank > 1 else None)
+
+
+@pytest.mark.parametrize("mode", [1, 2])
+def test_multipanel_index_structure(mode):
+    """TS 38.214 5.2.2.2.2 (image386/388/390): i_{1,4} carries Ng-1 panel
+    co-phases in codebookMode 1 and 2 panel co-phases in codebookMode 2; the
+    per-subband i_2 is scalar (mode 1) or [i_{2,0}, i_{2,1}, i_{2,2}] (mode 2)."""
+    from nr_csi.codebooks.type1_multipanel import Type1MultiPanelCodebook
+
+    ant = AntennaConfig.standard(2, 2, Ng=2)
+    cb = Type1MultiPanelCodebook(ant, N3=1, mode=mode)
+    assert cb._i14_shape() == ((ant.Ng - 1,) if mode == 1 else (2,))
+    assert cb._i2_shape() == ((1,) if mode == 1 else (1, 3))
+
+
+@pytest.mark.parametrize("mode", [1, 2])
+@pytest.mark.parametrize("rank", [1, 2, 3, 4])
+def test_multipanel_precoder_orthonormal(mode, rank):
+    """The multi-panel precoder is column-orthonormal up to the spec
+    1/sqrt(v) scaling: W^H W = I_v / v, tr = 1, for ranks 1..4, both modes."""
+    from nr_csi.codebooks.type1_multipanel import Type1MultiPanelCodebook
+
+    ant = AntennaConfig.standard(2, 2, Ng=2)
+    cb = Type1MultiPanelCodebook(ant, N3=1, mode=mode)
+    W = cb.precoder(_mp_pmi(mode, rank, ant.Ng))[0, 0]
+    gram = W.conj().T @ W
+    assert np.allclose(gram, np.eye(rank) / rank)
+    assert np.isclose(np.real(np.trace(gram)), 1.0)
+
+
+def test_multipanel_mode1_panel_cophase_is_qpsk():
+    """codebookMode 1: the inter-panel co-phase is a_p = e^{j pi i_{1,4,p}/2}
+    (QPSK).  Incrementing i_{1,4} by 1 rotates panel 2 by e^{j pi/2} = j."""
+    from nr_csi.codebooks.type1_multipanel import (
+        Type1MPPMI,
+        Type1MultiPanelCodebook,
+    )
+
+    ant = AntennaConfig.standard(2, 2, Ng=2)
+    cb = Type1MultiPanelCodebook(ant, N3=1, mode=1)
+    half = ant.P // 2  # panel 2 occupies the second half of the ports
+    W0 = cb.precoder(Type1MPPMI(1, 1, 0, 0, (0,), np.array([0]), None))[0, 0]
+    W1 = cb.precoder(Type1MPPMI(1, 1, 0, 0, (1,), np.array([0]), None))[0, 0]
+    assert np.allclose(W1[half:, 0] / W0[half:, 0], 1j)
 
 
 # ---------------------------------------------------------------------------

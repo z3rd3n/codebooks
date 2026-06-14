@@ -27,7 +27,13 @@ from math import comb
 
 import numpy as np
 
-from ..config import R16_PARAM_COMBOS, AntennaConfig, R16ParamCombo, m_v
+from ..config import (
+    R16_PARAM_COMBOS,
+    R16_PS_PARAM_COMBOS,
+    AntennaConfig,
+    R16ParamCombo,
+    m_v,
+)
 from ..utils import combinatorics as cb
 from ..utils import dft
 from ..utils import quantization as qt
@@ -118,11 +124,27 @@ class R16Type2Codebook(CodebookScheme):
         # generalized (L, p_v, beta) sweeps -- e.g. holding (L, M_v) fixed
         # while varying beta past the eight spec rows (used by the Qin Fig. 5
         # reproduction).  Default behaviour is unchanged: look up the spec row.
-        self.combo = combo if combo is not None else R16_PARAM_COMBOS[param_combination]
+        if combo is not None:
+            self.combo = combo
+        elif port_selection:
+            # The port-selection variant uses Table 5.2.2.2.6-1, which omits the
+            # L=6 rows (paramCombination 7, 8) of the regular table.
+            if param_combination not in R16_PS_PARAM_COMBOS:
+                raise ValueError(
+                    f"paramCombination-r16={param_combination} is not supported for "
+                    f"the eType II port-selection codebook; Table 5.2.2.2.6-1 lists "
+                    f"1..6 (the L=6 combinations 7, 8 are not allowed)"
+                )
+            self.combo = R16_PS_PARAM_COMBOS[param_combination]
+        else:
+            self.combo = R16_PARAM_COMBOS[param_combination]
         self.L = self.combo.L
         self.port_selection = port_selection
-        if port_selection and not (1 <= d <= 4 and d <= min(antenna.P // 2, self.L)):
-            raise ValueError("portSelectionSamplingSize d must satisfy d<=min(P/2,L), d in 1..4")
+        # TS 38.214 5.2.2.2.6: d in {1,2,3,4} and d <= L for port selection.
+        if port_selection and not (1 <= d <= 4 and d <= self.L):
+            raise ValueError(
+                "portSelectionSamplingSize-r16 d must satisfy d in {1,2,3,4} and d <= L"
+            )
         if not port_selection and self.L > antenna.n_ports_per_pol:
             raise ValueError(
                 f"L={self.L} beams cannot be drawn from an orthogonal group of "

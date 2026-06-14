@@ -113,6 +113,12 @@ def _r16_combo(antenna: AntennaConfig) -> int:
     return 1  # L = 2
 
 
+def _r16_ps_combo(antenna: AntennaConfig) -> int:
+    """Largest port-selection paramCombination (Table 5.2.2.2.6-1): L<=4 only,
+    the L=6 rows 7/8 of the regular table are not allowed for port selection."""
+    return 4 if antenna.n_ports_per_pol >= 4 else 1
+
+
 def _r18_combo(antenna: AntennaConfig) -> int:
     npp = antenna.n_ports_per_pol
     if npp >= 6:
@@ -131,7 +137,7 @@ def _build_case(family: str, antenna: AntennaConfig, rank: int, seed: int):
         return cbk, r16_precoder, H
     if family == "r16_ps":
         cbk = R16Type2Codebook(
-            antenna, N3=_N3, param_combination=_r16_combo(antenna), port_selection=True, d=1
+            antenna, N3=_N3, param_combination=_r16_ps_combo(antenna), port_selection=True, d=1
         )
         H = complex_channel(seed, 1, _N3, n_rx, antenna.P)
         return cbk, r16_precoder, H
