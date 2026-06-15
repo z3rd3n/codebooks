@@ -23,7 +23,7 @@ from nr_csi.config import (
 from nr_csi.utils import combinatorics as codec
 from nr_csi.utils import dft
 from nr_csi.utils import quantization as quant
-from tests.paper_oracles import paper_combo_decode, paper_combo_index, spatial_beam
+from tests.paper.paper_oracles import paper_combo_decode, paper_combo_index, spatial_beam
 
 CODEC_CASES = [
     (n_total, k)

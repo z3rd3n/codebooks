@@ -6,11 +6,12 @@ results/sionna_cdl/cdl_models.png for the real channel-richness story.  The
 right panel (estimation-noise robustness) maps directly to CDL.
 Into results/sionna_cdl_gallery/.
 
-Run: .venv/bin/python scripts/cdl_fig_08_channel_sensitivity.py [--fast --drops N --model C]
+Run: .venv/bin/python scripts/figures/cdl_fig_08_channel_sensitivity.py [--fast --drops N --model C]
 """
 
-import cdllib
 import fig_08_channel_sensitivity as orig
+
+from nr_csi.figtools import cdllib
 
 if __name__ == "__main__":
     cdllib.run_original(orig)

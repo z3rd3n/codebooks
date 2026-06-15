@@ -38,7 +38,7 @@ from nr_csi.codebooks.type1 import Type1PMI
 from nr_csi.codebooks.type2_r15 import R15Type2PMI
 from nr_csi.config import AntennaConfig
 from nr_csi.metrics.se import mu_rate, su_rate
-from tests.paper_oracles import direct_su_rate, spatial_beam
+from tests.paper.paper_oracles import direct_su_rate, spatial_beam
 
 
 def random_complex(rng: np.random.Generator, shape: tuple[int, ...]) -> np.ndarray:

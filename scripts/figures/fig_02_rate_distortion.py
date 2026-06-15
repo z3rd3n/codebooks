@@ -13,19 +13,29 @@ plane a learned CSI feedback scheme has to beat (R18 lives on the mobility
 axis and is compared in fig_05/fig_04 instead; on a static channel its
 report is R16's plus Doppler bits).
 
-Run: python scripts/fig_02_rate_distortion.py -> results/fig_02_rate_distortion.png
+Run: python scripts/figures/fig_02_rate_distortion.py -> results/fig_02_rate_distortion.png
 """
 
 import itertools
 
 import matplotlib.pyplot as plt
-from figlib import ANT, N3, cli, default_channel, run_eval, save, style
 
 from nr_csi.codebooks import (
     R15Type2Codebook,
     R16Type2Codebook,
     R17Type2Codebook,
     Type1Codebook,
+)
+from nr_csi.figtools.figlib import (
+    ANT,
+    N3,
+    ant_tag,
+    cli,
+    default_channel,
+    run_eval,
+    save,
+    select_families,
+    style,
 )
 
 SNR_REF_DB = 10.0
@@ -42,7 +52,7 @@ def sweep_points() -> list[tuple]:
         pts.append((R16Type2Codebook(ANT, N3=N3, param_combination=pc), "antenna", f"pc{pc}"))
     for pc in range(1, 9):
         pts.append((R17Type2Codebook(ANT, N3=N3, param_combination=pc), "beam", f"pc{pc}"))
-    return pts
+    return select_families(pts)
 
 
 def pareto(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -92,7 +102,7 @@ def main() -> None:
         ax.grid(alpha=0.3, which="both")
     axes[0].legend(fontsize=8, loc="lower right")
     fig.suptitle(
-        f"Rate-distortion plane, rank 1 -- (4,2) array, N3=8, {args.drops} drops "
+        f"Rate-distortion plane, rank 1 -- {ant_tag(ANT)}, N3={N3}, {args.drops} drops "
         "(R17 via PEB; every marker = one configuration)"
     )
     save(fig, args.out, "fig_02_rate_distortion", {"points": rows})

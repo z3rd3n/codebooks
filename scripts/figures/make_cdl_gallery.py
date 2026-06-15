@@ -1,12 +1,12 @@
 """Run every CDL figure script (cdl_fig_*.py) into results/sionna_cdl_gallery/.
 
-Full gallery:   python scripts/make_cdl_gallery.py
-Smoke test:     python scripts/make_cdl_gallery.py --fast
-Pick a model:   python scripts/make_cdl_gallery.py --model A
+Full gallery:   python scripts/figures/make_cdl_gallery.py
+Smoke test:     python scripts/figures/make_cdl_gallery.py --fast
+Pick a model:   python scripts/figures/make_cdl_gallery.py --model A
 Extra args (--drops, --seed) are forwarded to every script.
 
-Each cdl_fig_NN.py runs the matching fig_NN logic (scripts/figlib.py) on a
-Sionna 3GPP TR 38.901 CDL channel; see scripts/cdllib.py for the channel and
+Each cdl_fig_NN.py runs the matching fig_NN logic (nr_csi.figtools.figlib) on a
+Sionna 3GPP TR 38.901 CDL channel; see nr_csi.figtools.cdllib for the channel and
 results/sionna_cdl_gallery/fig_NN_*.md for the per-figure analysis.
 """
 

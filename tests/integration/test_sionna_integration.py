@@ -153,3 +153,30 @@ def test_tabcss_rejects_invalid_combination():
         SionnaCDLChannel(ANT, model="A", n_rb=100, subband_size=4, fft_size=2048)
     with pytest.raises(ValueError):  # 273 RB do not fit a 256-point grid
         SionnaCDLChannel(ANT, model="A", n_rb=273, subband_size=16)
+
+
+def test_larger_delay_spread_increases_frequency_selectivity():
+    """Correctness of the frequency/delay wiring: a larger configured delay
+    spread must shorten the coherence bandwidth on the PMI grid."""
+    from nr_csi.channel.diagnostics import coherence_lag, freq_correlation, rms_delay_spread
+
+    narrow = SionnaCDLChannel(ANT, N3=32, model="C", n_rx=2, delay_spread=30e-9)
+    wide = SionnaCDLChannel(ANT, N3=32, model="C", n_rx=2, delay_spread=300e-9)
+    Hn = np.stack([narrow.generate(n_slots=1) for _ in range(8)])
+    Hw = np.stack([wide.generate(n_slots=1) for _ in range(8)])
+    assert rms_delay_spread(Hw) > rms_delay_spread(Hn)
+    assert coherence_lag(freq_correlation(Hw)) < coherence_lag(freq_correlation(Hn))
+
+
+def test_ue_speed_increases_temporal_decorrelation():
+    """Correctness of the Doppler/time wiring: a faster UE must shorten the
+    temporal coherence (slots) at a fixed slot interval."""
+    from nr_csi.channel.diagnostics import coherence_lag, time_correlation
+
+    slow = SionnaCDLChannel(ANT, N3=8, model="C", n_rx=2, ue_speed_kmh=3.0,
+                            interval_duration=2e-3)
+    fast = SionnaCDLChannel(ANT, N3=8, model="C", n_rx=2, ue_speed_kmh=120.0,
+                            interval_duration=2e-3)
+    Hs = np.stack([slow.generate(n_slots=12) for _ in range(8)])
+    Hf = np.stack([fast.generate(n_slots=12) for _ in range(8)])
+    assert coherence_lag(time_correlation(Hf)) < coherence_lag(time_correlation(Hs))

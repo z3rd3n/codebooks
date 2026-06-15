@@ -24,6 +24,10 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.6",
 ]
+web = [
+    "streamlit>=1.30",
+    "pandas>=2.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -39,7 +43,7 @@ select = ["E", "F", "I", "W"]
 ignore = ["E731", "E741"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/test_sionna_integration.py" = ["E402"]  # imports after importorskip
+"tests/integration/test_sionna_integration.py" = ["E402"]  # imports after importorskip
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

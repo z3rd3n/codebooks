@@ -16,18 +16,27 @@ Regular codebooks search the DFT beam structure themselves and win on the
 antenna domain; PS codebooks assume the PEB already did that and win after
 it (paper "Applicable Scenarios").  Bars annotated with feedback bits.
 
-Run: python scripts/fig_09_port_selection.py -> results/fig_09_port_selection.png
+Run: python scripts/figures/fig_09_port_selection.py -> results/fig_09_port_selection.png
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import ANT, N3, BeamDomainChannel, cli, default_channel, run_eval, save
 
 from nr_csi.codebooks import (
     R15Type2Codebook,
     R16Type2Codebook,
     R17Type2Codebook,
     Type1Codebook,
+)
+from nr_csi.figtools.figlib import (
+    ANT,
+    N3,
+    BeamDomainChannel,
+    ant_tag,
+    cli,
+    default_channel,
+    run_eval,
+    save,
 )
 
 
@@ -80,7 +89,7 @@ def main() -> None:
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3, axis="y")
     ax.set_title(f"Regular vs port-selection across channel domains -- 2-ray drops, "
-                 f"(4,2) array, N3=8, {args.drops} drops")
+                 f"{ant_tag(ANT)}, N3={N3}, {args.drops} drops")
     save(fig, args.out, "fig_09_port_selection", {"rows": rows})
 
 

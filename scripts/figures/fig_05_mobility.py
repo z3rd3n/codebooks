@@ -15,15 +15,25 @@ Doppler-spread channel (off-grid Doppler up to one DFT shift over an
 Together with fig_04's right panel (bits to cover N4 intervals) this is
 the R18 trade: prediction fidelity at a fraction of the re-reporting cost.
 
-Run: python scripts/fig_05_mobility.py -> results/fig_05_mobility.png
+Run: python scripts/figures/fig_05_mobility.py -> results/fig_05_mobility.png
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import ANT, N3, cli, default_channel, run_eval, save, standard_schemes, style
 
 from nr_csi.baselines import eigen_precoder
 from nr_csi.codebooks import R15Type2Codebook, R16Type2Codebook, R18Type2Codebook
+from nr_csi.figtools.figlib import (
+    ANT,
+    N3,
+    ant_tag,
+    cli,
+    default_channel,
+    run_eval,
+    save,
+    standard_schemes,
+    style,
+)
 from nr_csi.metrics import sgcs
 
 HORIZON = 8  # intervals scored in the left panel (= channel Doppler period)
@@ -105,7 +115,7 @@ def main() -> None:
     axes[1].grid(alpha=0.3)
 
     fig.suptitle(f"Mobility -- off-grid Doppler over a {HORIZON}-interval period, "
-                 f"(4,2) array, N3=8, {args.drops} drops")
+                 f"{ant_tag(ANT)}, N3={N3}, {args.drops} drops")
     save(fig, args.out, "fig_05_mobility",
          {"per_interval": curves, "aging": {"delays": delays, **aging}})
 

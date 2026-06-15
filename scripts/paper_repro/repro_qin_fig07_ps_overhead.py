@@ -42,8 +42,8 @@ channel (``--model``, default C) via ``cdllib.CDLReplay``.  The PEB wrappers
 drops are TF-driven, so the base bank is rewound (``reset()``) before every
 scheme to keep the five curves paired.
 
-Run: python scripts/repro_qin_fig07_ps_overhead.py --out results/paper_replication
-     python scripts/repro_qin_fig07_ps_overhead.py --channel cdl --model C ...
+Run: python scripts/paper_repro/repro_qin_fig07_ps_overhead.py --out results/paper_replication
+     python scripts/paper_repro/repro_qin_fig07_ps_overhead.py --channel cdl --model C ...
 """
 
 from __future__ import annotations
@@ -52,13 +52,13 @@ import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import BeamDomainChannel, cli, save, style
 
 from nr_csi.channel import RandomRayChannel
 from nr_csi.channel.base import ChannelSource
 from nr_csi.codebooks import R16Type2Codebook, R17Type2Codebook, Type1Codebook
 from nr_csi.config import AntennaConfig
 from nr_csi.eval import evaluate
+from nr_csi.figtools.figlib import BeamDomainChannel, cli, save, style
 
 ANT = AntennaConfig.standard(8, 2)  # P = 32
 N3 = 13
@@ -138,7 +138,7 @@ def build_base(kind: str, model: str, args):
     (CDLReplay) before each scheme keeps every wrapped view paired.
     """
     if kind == "cdl":
-        from cdllib import DS, INTERVAL, SPEED, CDLReplay
+        from nr_csi.figtools.cdllib import DS, INTERVAL, SPEED, CDLReplay
 
         chan = CDLReplay(ANT, N3, n_rx=2, speed=SPEED, delay_spread=DS,
                          interval=INTERVAL, model=model, seed=args.seed, slots=1)

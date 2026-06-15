@@ -73,22 +73,22 @@ scripts/check.sh --with-sionna --cov  # everything, with coverage
 ## Reproducing the paper's figures
 
 ```bash
-python scripts/reproduce_f1.py   # SE vs SNR: Type I vs Type II vs eigen bound -> results/f1.png
-python scripts/reproduce_f2.py   # feedback bits vs L: R15/R16/R18            -> results/f2.png
+python scripts/paper_repro/reproduce_f1.py   # SE vs SNR: Type I vs Type II vs eigen bound -> results/f1.png
+python scripts/paper_repro/reproduce_f2.py   # feedback bits vs L: R15/R16/R18            -> results/f2.png
 ```
 
 ## Comparison figure gallery
 
-`scripts/fig_*.py` compare all codebook families along every axis the
+`scripts/figures/fig_*.py` compare all codebook families along every axis the
 harness measures (plan: `plans/plan_figures.md`; shared conventions in
-`scripts/figlib.py` — paired seeds, port-selection codebooks evaluated
+`nr_csi.figtools.figlib` — paired seeds, port-selection codebooks evaluated
 through a unitary DFT PEB, every PNG paired with a JSON of the plotted
 numbers). Regenerate everything with:
 
 ```bash
-python scripts/make_all_figures.py           # full quality -> results/fig_*.png
-python scripts/make_all_figures.py --fast    # smoke-test sizes
-python scripts/fig_02_rate_distortion.py --drops 200 --seed 1   # any one figure
+python scripts/figures/make_all_figures.py           # full quality -> results/fig_*.png
+python scripts/figures/make_all_figures.py --fast    # smoke-test sizes
+python scripts/figures/fig_02_rate_distortion.py --drops 200 --seed 1   # any one figure
 ```
 
 | Figure | Comparison |
@@ -112,6 +112,46 @@ and investigations of the initially surprising results (Type I's rank-2
 SGCS collapse, the R18 K₀ = ⌈2βLM₁Q⌉ static-channel budget bonus, R17's
 fidelity *rising* with P, the windowed-PS vs free-PS gap, the measurement-
 noise ranking inversion, the L = 1 overhead inversion in f2).
+
+## Web UI
+
+A small Streamlit app (`webapp/`) drives the gallery from a browser — no CLI
+needed. Pick a channel and its config, choose which codebook families to
+compare and which figures to generate, then inspect each PNG with the exact
+numbers behind it.
+
+```bash
+pip install -e ".[web]"            # streamlit + pandas
+pip install -e ".[sionna]"        # optional: enables the CDL channel option
+streamlit run webapp/app.py
+```
+
+The **Figure gallery** tab maps the form to `NRCSI_*` environment variables
+consumed by `nr_csi.figtools.figlib`/`cdllib` (antenna geometry, `N3`, `n_rx`,
+ray richness, the family filter, and CDL model/speed/delay-spread); each
+selected figure is then run as the same `scripts/figures/(cdl_)fig_*.py`
+subprocess, so the web view matches `make_all_figures.py` exactly. Codebook
+selection filters which families are overlaid (`NRCSI_FAMILIES`); a few figures
+show a fixed built-in set — *Overhead scaling* (analytic), *Rank adaptation*,
+*Port selection* — and *Array scaling* / *Frequency granularity* sweep the
+antenna / `N3` themselves, so those inputs don't apply to them.
+
+The **Compare channels** tab overlays the channel-domain diagnostics of several
+models (CDL A–E at any model/speed/delay-spread, and the synthetic ray channel)
+on one grid: power-delay profile, frequency correlation, temporal (Doppler)
+correlation, and the transmit-side spatial covariance spectrum
+(`scripts/figures/channel_compare.py`, metrics in `nr_csi.channel.diagnostics`).
+It also prints a validation table — measured vs configured RMS delay spread,
+coherence bandwidth/time, and the dominant spatial eigenvalue λ₁ (high ⇒
+line-of-sight). These are codebook-independent checks on the channel itself:
+delay spread must scale with its setting (down to the ~130 ns tap resolution of
+the default 256-pt / 30 kHz grid), temporal coherence must shorten with UE
+speed, and CDL-D/E (LoS) must concentrate λ₁ more than CDL-A/B/C (NLoS). The
+diagnostics are unit-tested against the synthetic channel
+(`tests/core/test_channel_diagnostics.py`, exact closed-form values) and the CDL
+trends are asserted in `tests/integration/test_sionna_integration.py`
+(`-m sionna`), complementing the existing spatial-wiring tests (port
+permutation, LoS array gain).
 
 ## Comparing your ML CSI algorithm
 
@@ -181,7 +221,7 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
    against the digitized figure (`eval.f1.calibrate_f1`) selected 8 paths
    with the unrestricted variant (`eval.f1.F1_REPRODUCTION`); all 63
    digitized points then reproduce within max(±0.6 b/s/Hz, ±8%)
-   (`tests/test_f1_paper_values.py`). Known residual: the paper's N=4
+   (`tests/eval/test_f1_paper_values.py`). Known residual: the paper's N=4
    single-stream Type I curve sits closer to Type II (~0.15 b/s/Hz) than
    spec-faithful selection allows (~0.5) on every channel family swept.
 4. **Fig. f2 absolute bar values are not derivable from the paper's own
@@ -189,13 +229,13 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
    ratio ≈17× at L=4; the table formulas give ≈3× under any consistent
    accounting). `metrics.overhead` implements the table formulas; the
    qualitative claims (R15 ≫ R16 > R18 for L≥2, equal growth in L, gap
-   growing with N₃/N₄) hold and are asserted in `tests/test_overhead.py`.
+   growing with N₃/N₄) hold and are asserted in `tests/eval/test_overhead.py`.
    A further consequence: at **L = 1 the table formulas invert the
    ordering** — R16 costs 744 bits vs R15's 488 at the f2 configuration,
    because R16's fixed machinery (i₁,₆ tap-combination index, K_NZ
    coefficient payload) is not amortized by a single beam — while the
    figure's bars show R16 below R15 everywhere. Locked in
-   `tests/test_overhead.py::TestF2Claims::test_l1_inversion_r16_exceeds_r15`.
+   `tests/eval/test_overhead.py::TestF2Claims::test_l1_inversion_r16_exceeds_r15`.
 5. **R16 PS parameter table** (TS 38.214 Table 5.2.2.2.6-1) is referenced but
    not transcribed in the paper; the regular `paramCombination-r16` table is
    reused for the PS variant here.
@@ -208,7 +248,7 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
    matched (L, p_v, β) is at least as accurate as R16 with nothing to
    predict — at strictly larger overhead. Expect R18 ≥ R16 in static
    comparisons (fig_08/fig_10); locked in
-   `tests/test_compression_properties.py::TestR18StaticBudget`.
+   `tests/eval/test_compression_properties.py::TestR18StaticBudget`.
 
 ## Traceability matrix (paper → code → test)
 
@@ -256,6 +296,12 @@ src/nr_csi/
   baselines/            eigen/SVD/ZF/RZF/MMSE full-CSI baselines
   metrics/              SE, SGCS/NMSE, feedback-overhead formulas
   eval/                 Monte-Carlo harness + Fig. f1 experiment
-scripts/                reproduce_f1.py, reproduce_f2.py
-tests/                  ~150 spec-anchored tests (see test matrix in plan)
+  figtools/             figlib/cdllib: shared figure + Sionna-CDL helpers
+scripts/
+  figures/              fig_*/cdl_fig_* gallery + make_all_figures/make_cdl_gallery
+  paper_repro/          reproduce_f1/f2, repro_qin_* (paper figures/tables)
+  compare/              compare_schemes, sionna_cdl_compare (scheme/ML comparison)
+  check.sh              lint + fast + slow (+ optional sionna) verification
+tests/                  ~150 spec-anchored tests, grouped into
+  spec/ codebooks/ core/ eval/ paper/ integration/   (see test matrix in plan)
 ```

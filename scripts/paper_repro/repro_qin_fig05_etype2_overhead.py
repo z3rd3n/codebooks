@@ -35,8 +35,8 @@ default C) via ``cdllib.CDLReplay`` -- a closer match to the paper's
 deployment channel.  CDL drops are TF-driven, so the replay bank is rewound
 (``reset()``) before every scheme to keep the comparison paired.
 
-Run: python scripts/repro_qin_fig05_etype2_overhead.py --out results/paper_replication
-     python scripts/repro_qin_fig05_etype2_overhead.py --channel cdl --model C ...
+Run: python scripts/paper_repro/repro_qin_fig05_etype2_overhead.py --out results/paper_replication
+     python scripts/paper_repro/repro_qin_fig05_etype2_overhead.py --channel cdl --model C ...
 """
 
 from __future__ import annotations
@@ -46,12 +46,12 @@ from fractions import Fraction
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import cli, save, style
 
 from nr_csi.channel import RandomRayChannel
 from nr_csi.codebooks import R15Type2Codebook, R16Type2Codebook, Type1Codebook
 from nr_csi.config import AntennaConfig, R16ParamCombo
 from nr_csi.eval import evaluate, evaluate_mu
+from nr_csi.figtools.figlib import cli, save, style
 
 ANT = AntennaConfig.standard(8, 2)  # P = 32 CSI-RS ports
 N3 = 13  # gives Mv in {4,7} for p_v in {1/4,1/2} (cf. the paper's Mv grid)
@@ -84,7 +84,7 @@ def build_channel(kind: str, model: str, args):
     if kind == "cdl":
         # CDLReplay caches TF-driven drops and rewinds on reset() -> paired
         # comparisons despite Sionna's global RNG (slots=1: static figure).
-        from cdllib import DS, INTERVAL, SPEED, CDLReplay
+        from nr_csi.figtools.cdllib import DS, INTERVAL, SPEED, CDLReplay
 
         chan = CDLReplay(ANT, N3, n_rx=2, speed=SPEED, delay_spread=DS,
                          interval=INTERVAL, model=model, seed=args.seed, slots=1)

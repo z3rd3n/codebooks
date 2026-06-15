@@ -12,25 +12,34 @@ reporting granularity changes:
   (the per-subband i2), R16's tap indicators grow ~logarithmically.
   N3 = 24, 32 exercise the R16 two-level (i15/i16) tap indication path.
 
-Run: python scripts/fig_11_frequency_granularity.py -> results/fig_11_frequency_granularity.png
+Run: python scripts/figures/fig_11_frequency_granularity.py  (-> results/<name>.png)
 """
 
 import matplotlib.pyplot as plt
-from figlib import ANT, cli, default_channel, run_eval, save, style
 
 from nr_csi.codebooks import R15Type2Codebook, R16Type2Codebook, Type1Codebook
+from nr_csi.figtools.figlib import (
+    ANT,
+    ant_tag,
+    cli,
+    default_channel,
+    run_eval,
+    save,
+    select_families,
+    style,
+)
 
 N3_GRID = [4, 8, 12, 18, 24, 32]
 DELAY_FRACTION = 0.375  # max ray delay as a fraction of N3 (3 taps at N3=8)
 
 
 def schemes_for(n3: int) -> list:
-    return [
+    return select_families([
         Type1Codebook(ANT, N3=n3),
         R15Type2Codebook(ANT, N3=n3, L=4),
         R16Type2Codebook(ANT, N3=n3, param_combination=4),  # L=4, p_v=1/4, beta=1/2
         R16Type2Codebook(ANT, N3=n3, param_combination=6),  # L=4, p_v=1/2, beta=1/2
-    ]
+    ], key=lambda s: s.name)
 
 
 def label_of(scheme) -> str:
@@ -71,7 +80,7 @@ def main() -> None:
     for ax in axes:
         ax.grid(alpha=0.3, which="both")
         ax.legend(fontsize=8)
-    fig.suptitle(f"Frequency-domain compression -- (4,2) array, rank 1, "
+    fig.suptitle(f"Frequency-domain compression -- {ant_tag(ANT)}, rank 1, "
                  f"delay spread = {DELAY_FRACTION:.0%} of band, {args.drops} drops")
     save(fig, args.out, "fig_11_frequency_granularity",
          {"n3": N3_GRID, "sgcs": fid, "bits": bits})

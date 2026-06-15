@@ -14,14 +14,22 @@ results/fig_12_summary_table.md (markdown) and .json -- quantifying the
 paper's qualitative comparison table.  (fig_12_summary.md holds the
 hand-written analysis of the figure.)
 
-Run: python scripts/fig_12_summary.py -> results/fig_12_summary.png
+Run: python scripts/figures/fig_12_summary.py -> results/fig_12_summary.png
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import ANT, cli, default_channel, run_eval, save, standard_schemes, style
 
 from nr_csi.baselines import eigen_precoder
+from nr_csi.figtools.figlib import (
+    ANT,
+    cli,
+    default_channel,
+    run_eval,
+    save,
+    standard_schemes,
+    style,
+)
 from nr_csi.metrics import sgcs
 
 AXES = ["SE@10dB rank1", "SE@10dB rank2", "SGCS rank1", "compactness", "mobility SGCS"]
@@ -33,7 +41,7 @@ def mobility_scores(args) -> dict[str, float]:
     chan = default_channel(max_doppler=1.0, doppler_period=horizon)
     out: dict[str, float] = {}
     for scheme, domain in standard_schemes(N4=horizon):
-        from figlib import BeamDomainChannel
+        from nr_csi.figtools.figlib import BeamDomainChannel
 
         ch = BeamDomainChannel(chan, ANT) if domain == "beam" else chan
         n_meas = getattr(scheme, "N4", 1)

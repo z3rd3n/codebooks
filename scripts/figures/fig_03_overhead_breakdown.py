@@ -15,12 +15,11 @@ its budget, while R16+ moves the cost into a fixed basis + bitmap whose
 size no longer scales with N3.  These totals are the serialization-honest
 numbers (len(pack(pmi)) is asserted equal in the test suite).
 
-Run: python scripts/fig_03_overhead_breakdown.py -> results/fig_03_overhead_breakdown.png
+Run: python scripts/figures/fig_03_overhead_breakdown.py -> results/fig_03_overhead_breakdown.png
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import ANT, BeamDomainChannel, cli, default_channel, save
 
 from nr_csi.codebooks import (
     R15Type2Codebook,
@@ -28,6 +27,14 @@ from nr_csi.codebooks import (
     R17Type2Codebook,
     R18Type2Codebook,
     Type1Codebook,
+)
+from nr_csi.figtools.figlib import (
+    ANT,
+    BeamDomainChannel,
+    cli,
+    default_channel,
+    save,
+    select_families,
 )
 
 N3_HERE = 18
@@ -54,13 +61,13 @@ GROUPS = {  # element -> (group, color)
 
 def main() -> None:
     args = cli(__doc__, drops=1)
-    schemes = [
+    schemes = select_families([
         (Type1Codebook(ANT, N3=N3_HERE), "antenna"),
         (R15Type2Codebook(ANT, N3=N3_HERE, L=4, subband_amplitude=True), "antenna"),
         (R16Type2Codebook(ANT, N3=N3_HERE, param_combination=6), "antenna"),
         (R17Type2Codebook(ANT, N3=N3_HERE, param_combination=5), "beam"),
         (R18Type2Codebook(ANT, N3=N3_HERE, N4=4, param_combination=7), "antenna"),
-    ]
+    ])
     chan = default_channel(n3=N3_HERE)
     beam_chan = BeamDomainChannel(chan, ANT)
     rng = np.random.default_rng(args.seed)

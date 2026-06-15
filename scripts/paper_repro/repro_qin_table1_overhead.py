@@ -11,13 +11,12 @@ The qualitative columns (number of spatial/delay/Doppler beams, the subband
 quantization manner, the dominant UE-side search complexity) are short
 annotations derived from each codebook module's documented reconstruction.
 
-Run: python scripts/repro_qin_table1_overhead.py --out results/paper_replication
+Run: python scripts/paper_repro/repro_qin_table1_overhead.py --out results/paper_replication
 """
 
 from __future__ import annotations
 
 import numpy as np
-from figlib import cli
 
 from nr_csi.channel import RandomRayChannel
 from nr_csi.codebooks import (
@@ -28,6 +27,7 @@ from nr_csi.codebooks import (
     Type1Codebook,
 )
 from nr_csi.config import AntennaConfig, m_v
+from nr_csi.figtools.figlib import cli
 from nr_csi.metrics.overhead import r15_bits, r16_bits, r18_bits
 
 ANT = AntennaConfig.standard(8, 2)  # P = 32

@@ -32,11 +32,11 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")  # quiet TF before any import
 
 import sys  # noqa: E402
 
-import figlib  # noqa: E402
 import numpy as np  # noqa: E402
 
 from nr_csi.channel.base import ChannelSource  # noqa: E402
 from nr_csi.eval import evaluate  # noqa: E402
+from nr_csi.figtools import figlib  # noqa: E402
 
 GALLERY = figlib.RESULTS / "sionna_cdl_gallery"
 
@@ -131,7 +131,7 @@ def cdl_channel(ant=figlib.ANT, n3=figlib.N3, **kwargs) -> CDLReplay:
     mobile = float(kwargs.get("max_doppler", 0.0) or 0.0) > 0.0
     speed = SPEED_FAST if mobile else SPEED
     interval = INTERVAL_FAST if mobile else INTERVAL
-    n_rx = int(kwargs.get("n_rx", 2))
+    n_rx = int(kwargs.get("n_rx", os.environ.get("NRCSI_N_RX", 2)))
     key = (MODEL, ant, n3, n_rx, speed, DS, interval, SLOTS, SEED)
     chan = _CACHE.get(key)
     if chan is None:

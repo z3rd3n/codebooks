@@ -1,7 +1,7 @@
 """Run every comparison figure script (fig_*.py) and report timing/status.
 
-Full gallery:   python scripts/make_all_figures.py
-Smoke test:     python scripts/make_all_figures.py --fast
+Full gallery:   python scripts/figures/make_all_figures.py
+Smoke test:     python scripts/figures/make_all_figures.py --fast
 Extra args (e.g. --drops 200 --seed 1 --out results) are forwarded to
 every script.
 

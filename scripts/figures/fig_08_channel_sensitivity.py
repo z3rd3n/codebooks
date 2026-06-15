@@ -13,11 +13,21 @@
 
 Standard scheme set, rank 1.
 
-Run: python scripts/fig_08_channel_sensitivity.py -> results/fig_08_channel_sensitivity.png
+Run: python scripts/figures/fig_08_channel_sensitivity.py -> results/fig_08_channel_sensitivity.png
 """
 
 import matplotlib.pyplot as plt
-from figlib import cli, default_channel, run_eval, save, standard_schemes, style
+
+from nr_csi.figtools.figlib import (
+    N3,
+    ant_tag,
+    cli,
+    default_channel,
+    run_eval,
+    save,
+    standard_schemes,
+    style,
+)
 
 PATHS = [1, 2, 3, 4, 6, 8, 12]
 MEAS_SNR_DB = [-10.0, -5.0, 0.0, 5.0, 10.0, 15.0, 20.0, None]  # None = noiseless
@@ -52,18 +62,20 @@ def main() -> None:
         data["vs_meas_snr"][scheme.name] = ys
 
     # fairness check (S3): give R16 the same 4-slot observation window R18
-    # silently enjoys -- its single report then averages the noise too
-    r16 = next(s for s, _ in standard_schemes() if s.name == "R16 eType II")
-    ys = []
-    for m in MEAS_SNR_DB:
-        res = run_eval(r16, default_channel(**chan_kwargs), "antenna", seed=args.seed,
-                       snr_db=[10.0], rank=1, n_drops=args.drops,
-                       measurement_snr_db=m, measurement_slots=4)
-        ys.append(res.sgcs)
-    st = style(r16.name)
-    st["linestyle"] = "--"
-    axes[1].plot(xs, ys, label="R16 eType II (4-slot meas.)", **st)
-    data["vs_meas_snr"]["R16 eType II (4-slot meas.)"] = ys
+    # silently enjoys -- its single report then averages the noise too.  Skipped
+    # when a family filter (NRCSI_FAMILIES) excludes R16.
+    r16 = next((s for s, _ in standard_schemes() if s.name == "R16 eType II"), None)
+    if r16 is not None:
+        ys = []
+        for m in MEAS_SNR_DB:
+            res = run_eval(r16, default_channel(**chan_kwargs), "antenna", seed=args.seed,
+                           snr_db=[10.0], rank=1, n_drops=args.drops,
+                           measurement_snr_db=m, measurement_slots=4)
+            ys.append(res.sgcs)
+        st = style(r16.name)
+        st["linestyle"] = "--"
+        axes[1].plot(xs, ys, label="R16 eType II (4-slot meas.)", **st)
+        data["vs_meas_snr"]["R16 eType II (4-slot meas.)"] = ys
 
     axes[0].set_xlabel("number of multipath rays")
     axes[0].set_ylabel("mean SGCS")
@@ -77,7 +89,7 @@ def main() -> None:
     axes[1].legend(fontsize=8)
     axes[1].grid(alpha=0.3)
 
-    fig.suptitle(f"Channel sensitivity -- (4,2) array, N3=8, rank 1, {args.drops} drops")
+    fig.suptitle(f"Channel sensitivity -- {ant_tag()}, N3={N3}, rank 1, {args.drops} drops")
     save(fig, args.out, "fig_08_channel_sensitivity", data)
 
 

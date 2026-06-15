@@ -18,12 +18,11 @@ R17 is evaluated in the beam domain (unitary PEB -- same physical drops).
 R18 is omitted: per-report it is R16 plus Doppler bits, and `evaluate_mu`
 is single-interval.
 
-Run: python scripts/fig_06_mu_mimo.py -> results/fig_06_mu_mimo.png
+Run: python scripts/figures/fig_06_mu_mimo.py -> results/fig_06_mu_mimo.png
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import ANT, N3, BeamDomainChannel, cli, default_channel, save, style
 
 from nr_csi.codebooks import (
     R15Type2Codebook,
@@ -32,6 +31,17 @@ from nr_csi.codebooks import (
     Type1Codebook,
 )
 from nr_csi.eval import evaluate_mu
+from nr_csi.figtools.figlib import (
+    ANT,
+    N3,
+    BeamDomainChannel,
+    ant_tag,
+    cli,
+    default_channel,
+    save,
+    select_families,
+    style,
+)
 
 SNR_DB = [-5.0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0]
 SNR_REF = 15.0
@@ -39,12 +49,12 @@ USERS = [2, 3, 4, 6, 8]
 
 
 def schemes():
-    return [
+    return select_families([
         (Type1Codebook(ANT, N3=N3), "antenna"),
         (R15Type2Codebook(ANT, N3=N3, L=4), "antenna"),
         (R16Type2Codebook(ANT, N3=N3, param_combination=6), "antenna"),
         (R17Type2Codebook(ANT, N3=N3, param_combination=5), "beam"),
-    ]
+    ])
 
 
 def run(scheme, domain, n_users, snr_db, args):
@@ -99,7 +109,7 @@ def main() -> None:
     axes[1].legend(fontsize=8)
     axes[1].grid(alpha=0.3)
 
-    fig.suptitle(f"MU-MIMO from reported PMIs -- (4,2) array, P=16, N3=8, "
+    fig.suptitle(f"MU-MIMO from reported PMIs -- {ant_tag(ANT)}, N3={N3}, "
                  f"{args.drops} drops, equal power split")
     save(fig, args.out, "fig_06_mu_mimo", data)
 

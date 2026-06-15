@@ -8,13 +8,13 @@ Three panels at the paper's f2 operating point ((16,1) array, rank v = 2):
 * bits vs N4 intervals covered: R15/R16 must re-report every interval,
   R18 covers all N4 with one predicted-PMI report (the f2 convention).
 
-Run: python scripts/fig_04_overhead_scaling.py -> results/fig_04_overhead_scaling.png
+Run: python scripts/figures/fig_04_overhead_scaling.py -> results/fig_04_overhead_scaling.png
 """
 
 import matplotlib.pyplot as plt
-from figlib import cli, save, style
 
 from nr_csi.config import AntennaConfig, m_v
+from nr_csi.figtools.figlib import cli, save, style
 from nr_csi.metrics.overhead import r15_bits, r16_bits, r18_bits
 
 ANT_F2 = AntennaConfig.standard(16, 1)

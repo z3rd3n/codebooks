@@ -12,14 +12,14 @@ Note that ``SionnaCDLChannel.generate`` is driven by TensorFlow's RNG, so the
 ``default_rng(7)`` seed below only affects the (here absent) measurement
 noise, not the channel drops -- each scheme is scored on its own independent
 batch of CDL realizations, which is fine for this 50-drop console demo.  For a
-paired, reproducible figure comparison see ``scripts/sionna_cdl_compare.py``.
+paired, reproducible figure comparison see ``scripts/compare/sionna_cdl_compare.py``.
 
 Note on R17: it is a *port-selection* codebook, designed for beam-domain
 channels (the gNB applies a full-connect PEB to the CSI-RS first).  Running
 it directly on an antenna-domain channel, as here, understates it -- shown
 anyway to illustrate the applicability boundary the paper describes.
 
-Run: .venv/bin/python scripts/compare_schemes.py
+Run: .venv/bin/python scripts/compare/compare_schemes.py
 """
 
 import numpy as np

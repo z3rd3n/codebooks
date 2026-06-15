@@ -22,7 +22,7 @@ import numpy as np
 from nr_csi.config import AntennaConfig
 from nr_csi.metrics.overhead import f2_comparison
 
-OUT = pathlib.Path(__file__).resolve().parent.parent / "results"
+OUT = pathlib.Path(__file__).resolve().parents[2] / "results"
 
 
 def main() -> None:

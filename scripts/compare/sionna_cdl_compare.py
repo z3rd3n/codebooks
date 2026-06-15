@@ -1,6 +1,6 @@
 """Compare 3GPP codebooks (+ an ML stand-in) on realistic 38.901 CDL channels.
 
-The companion of ``scripts/compare_schemes.py``: the same five schemes
+The companion of ``scripts/compare/compare_schemes.py``: the same five schemes
 (Type I, R15/R16 Type II, R17 port-selection, and the ``OracleSVDScheme`` ML
 stand-in), but scored on Sionna CDL drops instead of the synthetic random-ray
 channel, and rendered as figures under ``results/sionna_cdl/``.
@@ -19,9 +19,9 @@ Figures (each written as ``<name>.png`` + ``<name>.json``):
   * ``summary``    -- SGCS, feedback bits, and SE@{0,10,20} dB as bar charts.
   * ``cdl_models`` -- per-scheme SGCS across CDL-A..E (sparse NLOS -> LoS).
 
-Run: .venv/bin/python scripts/sionna_cdl_compare.py            # full
-     .venv/bin/python scripts/sionna_cdl_compare.py --fast     # smoke test
-     .venv/bin/python scripts/sionna_cdl_compare.py --model A --drops 120
+Run: .venv/bin/python scripts/compare/sionna_cdl_compare.py            # full
+     .venv/bin/python scripts/compare/sionna_cdl_compare.py --fast     # smoke test
+     .venv/bin/python scripts/compare/sionna_cdl_compare.py --model A --drops 120
 """
 
 from __future__ import annotations
@@ -36,7 +36,6 @@ import pathlib  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402  (figlib set the Agg backend)
 import numpy as np  # noqa: E402
 from compare_schemes import OracleSVDScheme  # noqa: E402  (ML stand-in)
-from figlib import RESULTS, BeamDomainChannel, save, style  # noqa: E402
 
 from nr_csi.channel.base import ChannelSource  # noqa: E402
 from nr_csi.channel.sionna_adapter import SionnaCDLChannel  # noqa: E402
@@ -48,6 +47,7 @@ from nr_csi.codebooks import (  # noqa: E402
 )
 from nr_csi.config import AntennaConfig  # noqa: E402
 from nr_csi.eval import evaluate  # noqa: E402
+from nr_csi.figtools.figlib import RESULTS, BeamDomainChannel, save, style  # noqa: E402
 
 ANT = AntennaConfig.standard(16, 1)  # P = 32 CSI-RS ports
 N3 = 8

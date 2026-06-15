@@ -19,7 +19,7 @@ from nr_csi.codebooks.etype2_r16 import select_taps
 from nr_csi.codebooks.type1 import Type1PMI, i13_offsets
 from nr_csi.codebooks.type2_r15 import R15Type2PMI
 from nr_csi.config import SUPPORTED_N1N2, AntennaConfig
-from tests.paper_oracles import (
+from tests.paper.paper_oracles import (
     direct_su_rate,
     paper_combo_index,
     r15_precoder,

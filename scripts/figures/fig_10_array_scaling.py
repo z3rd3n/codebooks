@@ -21,11 +21,10 @@ at P = 32, is overlaid as hollow markers to separate "more ports" from
   L = N1N2 means "all beams", i.e. a complete basis), coefficient counts
   are set by L/M_v/K0, not P.
 
-Run: python scripts/fig_10_array_scaling.py -> results/fig_10_array_scaling.png
+Run: python scripts/figures/fig_10_array_scaling.py -> results/fig_10_array_scaling.png
 """
 
 import matplotlib.pyplot as plt
-from figlib import N3, cli, default_channel, run_eval, save, style
 
 from nr_csi.codebooks import (
     R15Type2Codebook,
@@ -35,19 +34,28 @@ from nr_csi.codebooks import (
     Type1Codebook,
 )
 from nr_csi.config import AntennaConfig
+from nr_csi.figtools.figlib import (
+    N3,
+    cli,
+    default_channel,
+    run_eval,
+    save,
+    select_families,
+    style,
+)
 
 GEOMETRIES = [(2, 2), (4, 2), (6, 2), (8, 2)]  # P = 8, 16, 24, 32
 CONTRAST = (16, 1)  # second geometry at P = 32: aspect ratio, not port count
 
 
 def schemes_for(ant: AntennaConfig) -> list[tuple]:
-    return [
+    return select_families([
         (Type1Codebook(ant, N3=N3), "antenna"),
         (R15Type2Codebook(ant, N3=N3, L=4), "antenna"),
         (R16Type2Codebook(ant, N3=N3, param_combination=6), "antenna"),
         (R17Type2Codebook(ant, N3=N3, param_combination=5), "beam"),  # K1 = P/2
         (R18Type2Codebook(ant, N3=N3, N4=4, param_combination=7), "antenna"),
-    ]
+    ])
 
 
 def measure(ant: AntennaConfig, args) -> dict[str, dict]:
@@ -75,7 +83,7 @@ def main() -> None:
         f"{n}: se={d['se']:.2f} sgcs={d['sgcs']:.3f}" for n, d in contrast.items()))
 
     names = list(sweep[0])
-    ub = [pt["R15 Type I"]["ub"] for pt in sweep]  # same drops for 1-slot schemes
+    ub = [pt[names[0]]["ub"] for pt in sweep]  # same drops for all 1-slot schemes
     fig, axes = plt.subplots(2, 2, figsize=(12.5, 8.6))
     panels = {
         "se": (axes[0, 0], "SE @ 10 dB (bits/s/Hz)", "beamforming gain vs array size"),
@@ -112,7 +120,7 @@ def main() -> None:
         ax.grid(alpha=0.3, which="both")
     axes[0, 0].legend(fontsize=8)
     fig.suptitle(f"Array scaling -- (N1,N2) in {GEOMETRIES} + {CONTRAST}, rank 1, "
-                 f"N3=8, {args.drops} drops (R17 via PEB, K1=P/2; R18 N4=4)")
+                 f"N3={N3}, {args.drops} drops (R17 via PEB, K1=P/2; R18 N4=4)")
     fig.tight_layout()
     save(fig, args.out, "fig_10_array_scaling", {
         "ports": ports,

@@ -15,7 +15,7 @@ import numpy as np
 
 from nr_csi.eval.f1 import F1_REPRODUCTION, run_f1_case
 
-OUT = pathlib.Path(__file__).resolve().parent.parent / "results"
+OUT = pathlib.Path(__file__).resolve().parents[2] / "results"
 
 
 def main() -> None:

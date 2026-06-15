@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 
 import matplotlib
@@ -39,11 +40,28 @@ from nr_csi.config import AntennaConfig  # noqa: E402
 from nr_csi.eval import evaluate  # noqa: E402
 from nr_csi.utils import dft  # noqa: E402
 
-RESULTS = pathlib.Path(__file__).resolve().parent.parent / "results"
+# src/nr_csi/figtools/figlib.py -> repo root is three levels up.
+RESULTS = pathlib.Path(__file__).resolve().parents[3] / "results"
 
-# Default benchmark configuration shared by the Monte-Carlo figures.
-ANT = AntennaConfig.standard(4, 2)  # P = 16 CSI-RS ports
-N3 = 8
+# Default benchmark configuration shared by the Monte-Carlo figures.  The
+# antenna geometry and frequency granularity are env-overridable so the web UI
+# (webapp/) can drive every figure without editing code; unset env == the
+# original (4,2)/N3=8 benchmark, so the CLI and test suite are unaffected.
+ANT = AntennaConfig.standard(
+    int(os.environ.get("NRCSI_N1", 4)), int(os.environ.get("NRCSI_N2", 2))
+)  # P = 2 * N1 * N2 CSI-RS ports
+N3 = int(os.environ.get("NRCSI_N3", 8))
+
+# The five comparison families, in plot order.  ``select_families`` filters a
+# scheme list down to the ones named in NRCSI_FAMILIES (a comma-separated subset
+# of these keys); matching uses the same longest-prefix rule as ``style``.
+FAMILY_KEYS = (
+    "R15 Type I",
+    "R15 Type II",
+    "R16 eType II",
+    "R17 FeType II PS",
+    "R18 eType II Doppler",
+)
 
 # One fixed color/marker per codebook family across every figure.
 STYLE: dict[str, dict] = {
@@ -65,17 +83,46 @@ def style(name: str) -> dict:
     return dict(STYLE[best]) if best else {}
 
 
+def ant_tag(ant: AntennaConfig | None = None) -> str:
+    """Short ``(N1,N2) array, P=NN`` label for figure titles -- reflects the
+    (possibly env-overridden) antenna so titles match the actual run."""
+    a = ant or ANT
+    return f"({a.N1},{a.N2}) array, P={a.P}"
+
+
+def _family_of(name: str) -> str | None:
+    """Map a scheme name to its FAMILY_KEYS bucket (longest matching prefix)."""
+    return max((k for k in FAMILY_KEYS if name.startswith(k)), key=len, default=None)
+
+
+def select_families(schemes: list, *, key=lambda x: x[0].name) -> list:
+    """Filter a list of scheme tuples to the families named in NRCSI_FAMILIES.
+
+    ``NRCSI_FAMILIES`` is a comma-separated subset of ``FAMILY_KEYS`` set by the
+    web UI.  When it is unset (the CLI/test default) the list is returned
+    unchanged; if the requested subset would drop *every* scheme, the list is
+    also returned unchanged so a figure never renders empty.
+    """
+    raw = os.environ.get("NRCSI_FAMILIES", "").strip()
+    if not raw:
+        return schemes
+    wanted = {f.strip() for f in raw.split(",") if f.strip()}
+    kept = [s for s in schemes if _family_of(key(s)) in wanted]
+    return kept if kept else schemes
+
+
 def standard_schemes(ant: AntennaConfig = ANT, n3: int = N3, N4: int = 4) -> list[tuple]:
     """The five-family comparison set at matched L = 4, as (scheme, domain)
     pairs with domain in {"antenna", "beam"} (beam = evaluate through the
-    DFT PEB, the port-selection deployment model)."""
-    return [
+    DFT PEB, the port-selection deployment model).  Filtered by NRCSI_FAMILIES
+    when the web UI requests a subset (see ``select_families``)."""
+    return select_families([
         (Type1Codebook(ant, N3=n3), "antenna"),
         (R15Type2Codebook(ant, N3=n3, L=4), "antenna"),
         (R16Type2Codebook(ant, N3=n3, param_combination=6), "antenna"),
         (R17Type2Codebook(ant, N3=n3, param_combination=5), "beam"),
         (R18Type2Codebook(ant, N3=n3, N4=N4, param_combination=7), "antenna"),
-    ]
+    ])
 
 
 class BeamDomainChannel(ChannelSource):
@@ -147,10 +194,12 @@ def run_eval(
 
 def default_channel(ant: AntennaConfig = ANT, n3: int = N3, **kwargs) -> RandomRayChannel:
     """The benchmark channel: sparse multipath, Type II's design regime but
-    honest for Type I as well (off-grid angles/delays)."""
-    kwargs.setdefault("n_rx", 2)
-    kwargs.setdefault("n_paths", 4)
-    kwargs.setdefault("max_delay", 3.0)
+    honest for Type I as well (off-grid angles/delays).  ``n_rx``/``n_paths``/
+    ``max_delay`` fall back to NRCSI_N_RX/NRCSI_N_PATHS/NRCSI_MAX_DELAY (set by
+    the web UI) and finally to the benchmark defaults."""
+    kwargs.setdefault("n_rx", int(os.environ.get("NRCSI_N_RX", 2)))
+    kwargs.setdefault("n_paths", int(os.environ.get("NRCSI_N_PATHS", 4)))
+    kwargs.setdefault("max_delay", float(os.environ.get("NRCSI_MAX_DELAY", 3.0)))
     return RandomRayChannel(ant, N3=n3, **kwargs)
 
 

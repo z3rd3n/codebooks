@@ -9,12 +9,22 @@ R17 is evaluated through the unitary DFT PEB (its deployment model); R18
 reports once per N4 = 4 intervals (static channel, so its curve isolates
 the fidelity cost of also encoding the Doppler axis).
 
-Run: python scripts/fig_01_se_vs_snr.py  ->  results/fig_01_se_vs_snr.png
+Run: python scripts/figures/fig_01_se_vs_snr.py  ->  results/fig_01_se_vs_snr.png
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import cli, default_channel, run_eval, save, standard_schemes, style
+
+from nr_csi.figtools.figlib import (
+    N3,
+    ant_tag,
+    cli,
+    default_channel,
+    run_eval,
+    save,
+    standard_schemes,
+    style,
+)
 
 SNR_DB = list(np.arange(-5.0, 31.0, 5.0))
 
@@ -33,8 +43,9 @@ def main() -> None:
             results[scheme.name] = res
             label = scheme.name + (" (via PEB)" if domain == "beam" else "")
             ax.plot(SNR_DB, res.se, label=label, **style(scheme.name))
-        # upper bound from the Type I run (same drops for all 1-slot schemes)
-        ub = results["R15 Type I"].se_upper_bound
+        # upper bound is identical for all 1-slot schemes (same drops); take the
+        # first available so a family filter that drops Type I still works
+        ub = next(iter(results.values())).se_upper_bound
         ax.plot(SNR_DB, ub, label="eigen upper bound", **style("eigen upper bound"))
         ax.set_title(f"rank {rank}")
         ax.set_xlabel("SNR (dB)")
@@ -52,8 +63,8 @@ def main() -> None:
     axes[0].set_ylabel("spectral efficiency (bits/s/Hz)")
     axes[0].legend(fontsize=8, loc="upper left")
     fig.suptitle(
-        f"SU spectral efficiency vs SNR -- (4,2) array, P=16, N3=8, "
-        f"{args.drops} drops, sparse 4-ray channel"
+        f"SU spectral efficiency vs SNR -- {ant_tag()}, N3={N3}, "
+        f"{args.drops} drops, sparse multipath channel"
     )
     save(fig, args.out, "fig_01_se_vs_snr", data)
 

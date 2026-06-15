@@ -1,7 +1,7 @@
 """Focused correctness extensions closing genuine gaps in the suite.
 
 Four independent angles, all reusing the existing equation-level oracles
-(``tests.paper_oracles``) and config constants -- no production code is
+(``tests.paper.paper_oracles``) and config constants -- no production code is
 exercised that the oracles also touch:
 
 * end-to-end rank-3/4 rejection through the *public* codebook API (not just
@@ -27,7 +27,7 @@ from nr_csi.codebooks import (
 )
 from nr_csi.config import SUPPORTED_N1N2, AntennaConfig
 from nr_csi.utils import combinatorics as cb
-from tests.paper_oracles import r16_precoder, r17_precoder, r18_precoder
+from tests.paper.paper_oracles import r16_precoder, r17_precoder, r18_precoder
 
 
 def complex_channel(seed: int, n_slots: int, N3: int, n_rx: int, P: int) -> np.ndarray:

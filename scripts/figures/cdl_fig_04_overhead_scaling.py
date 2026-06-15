@@ -5,11 +5,12 @@ channel, so the CDL figure is identical to the synthetic one.  It is included
 for a complete gallery; the .md explains the channel-independence.
 Into results/sionna_cdl_gallery/.
 
-Run: .venv/bin/python scripts/cdl_fig_04_overhead_scaling.py
+Run: .venv/bin/python scripts/figures/cdl_fig_04_overhead_scaling.py
 """
 
-import cdllib
 import fig_04_overhead_scaling as orig
+
+from nr_csi.figtools import cdllib
 
 if __name__ == "__main__":
     cdllib.run_original(orig)

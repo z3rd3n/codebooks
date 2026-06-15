@@ -8,16 +8,16 @@ R15 Type I and R16 eType II on a 4-rx, 6-ray channel:
 * right: the rank distribution auto-RI actually picks vs SNR -- low SNR
   favors beamforming gain (rank 1), high SNR favors multiplexing.
 
-Run: python scripts/fig_07_rank_adaptation.py -> results/fig_07_rank_adaptation.png
+Run: python scripts/figures/fig_07_rank_adaptation.py -> results/fig_07_rank_adaptation.png
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
-from figlib import ANT, N3, cli, default_channel, save
 
 from nr_csi.baselines import eigen_precoder
 from nr_csi.codebooks import R16Type2Codebook, Type1Codebook
 from nr_csi.eval.harness import select_rank
+from nr_csi.figtools.figlib import ANT, N3, cli, default_channel, save
 from nr_csi.metrics import su_rate
 
 SNR_DB = [-5.0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0]
