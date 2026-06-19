@@ -3,3 +3,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .DS_Store
+
+# Generated CDL datasets (sharded HDF5 + manifest/audit artifacts)
+data/
+results/webapp_dataset/

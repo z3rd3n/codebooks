@@ -228,3 +228,66 @@ def run_channel_compare(spec: dict, run: dict) -> dict:
             data = None
     return {"ok": ok and fresh, "png": png if fresh else None, "data": data,
             "log": log, "seconds": seconds, "cmd": " ".join(argv)}
+
+
+# ----------------------------------------------------------------- dataset (CDL)
+
+DATASET_GEN = REPO_ROOT / "scripts" / "dataset" / "generate_cdl_dataset.py"
+DATASET_AUDIT = REPO_ROOT / "scripts" / "dataset" / "audit_dataset.py"
+DATASET_CONFIGS = ["4x2", "16x1", "16x2"]  # 16 / 32 / 64 ports
+PREVIEW_MAX_SAMPLES = 600  # the in-app generate stays small; bulk runs use the CLI
+
+
+def _run(argv: list[str], timeout: int) -> tuple[bool, str, float]:
+    """Run a subprocess (TF/Sionna out of the Streamlit process); return ok/log/seconds."""
+    env = os.environ.copy()
+    env.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+    started = time.time()
+    try:
+        proc = subprocess.run(argv, cwd=str(REPO_ROOT), env=env, capture_output=True,
+                              text=True, timeout=timeout)
+        return proc.returncode == 0, (proc.stdout or "") + (proc.stderr or ""), started
+    except subprocess.TimeoutExpired as e:
+        return False, f"TIMEOUT\n{e.stdout or ''}{e.stderr or ''}", started
+
+
+def run_dataset_generate(spec: dict, run: dict) -> dict:
+    """Generate a small preview dataset (capped at ``PREVIEW_MAX_SAMPLES``).
+
+    ``spec`` keys: configs/profiles (csv strings), n_samples, n_rx, freq_res,
+    seed, out (dir).  Reads back the written ``manifest.json``."""
+    out_dir = pathlib.Path(spec["out"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest = out_dir / "manifest.json"
+    n_samples = max(1, min(int(spec["n_samples"]), PREVIEW_MAX_SAMPLES))
+    argv = [sys.executable, str(DATASET_GEN),
+            "--configs", spec["configs"], "--profiles", spec["profiles"],
+            "--n-samples", str(n_samples), "--n-rx", str(spec["n_rx"]),
+            "--freq-res", str(spec["freq_res"]), "--seed", str(spec["seed"]),
+            "--out", str(out_dir), "--batch-size", str(min(128, n_samples)),
+            "--shard-size", str(n_samples), "--no-progress"]
+    ok, log, started = _run(argv, run.get("timeout", 1800))
+    seconds = time.time() - started
+    fresh = manifest.exists() and manifest.stat().st_mtime >= started - 1
+    data = json.loads(manifest.read_text()) if fresh else None
+    return {"ok": ok and fresh, "manifest": data, "out": str(out_dir),
+            "log": log, "seconds": seconds, "cmd": " ".join(argv)}
+
+
+def run_dataset_audit(dataset_dir: str, run: dict) -> dict:
+    """Audit an existing dataset dir; reads back ``audit.png`` + ``audit.json``."""
+    d = pathlib.Path(dataset_dir)
+    png, js = d / "audit.png", d / "audit.json"
+    argv = [sys.executable, str(DATASET_AUDIT), str(d),
+            "--max-samples", str(run.get("max_samples", 1500))]
+    ok, log, started = _run(argv, run.get("timeout", 1200))
+    seconds = time.time() - started
+    fresh = png.exists() and png.stat().st_mtime >= started - 1
+    data = None
+    if js.exists() and js.stat().st_mtime >= started - 1:
+        try:
+            data = json.loads(js.read_text())
+        except json.JSONDecodeError:
+            data = None
+    return {"ok": ok and fresh, "png": png if fresh else None, "data": data,
+            "log": log, "seconds": seconds, "cmd": " ".join(argv)}

@@ -14,7 +14,17 @@ from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
-from registry import CDL_MODELS, FAMILIES, FIGURES, run_channel_compare, run_figure
+from registry import (
+    CDL_MODELS,
+    DATASET_CONFIGS,
+    FAMILIES,
+    FIGURES,
+    PREVIEW_MAX_SAMPLES,
+    run_channel_compare,
+    run_dataset_audit,
+    run_dataset_generate,
+    run_figure,
+)
 
 from nr_csi.config import SUPPORTED_N1N2
 
@@ -56,7 +66,8 @@ with st.sidebar:
     seed = st.number_input("Seed", 0, 10_000, 0, 1)
 
 st.title("📡 3GPP CSI Codebook Explorer")
-tab_fig, tab_chan = st.tabs(["📊 Figure gallery", "📡 Compare channels"])
+tab_fig, tab_chan, tab_dataset = st.tabs(
+    ["📊 Figure gallery", "📡 Compare channels", "🗂️ Dataset"])
 
 # ===================================================================== FIGURES
 with tab_fig:
@@ -234,3 +245,86 @@ with tab_chan:
                 st.code(cres["log"] or "(no output)", language="text")
     else:
         st.info("Edit the channel table and click **Compare channels**.")
+
+# ================================================================= DATASET (CDL)
+with tab_dataset:
+    st.caption("Generate a small **preview** CDL training dataset for the AI/ML CSI "
+               "compression model, or **audit** an existing one. Bulk 100–200k "
+               "generation is the CLI `scripts/dataset/generate_cdl_dataset.py`; this "
+               "tab is an explorer / QA surface (capped at "
+               f"{PREVIEW_MAX_SAMPLES} samples).")
+    mode = st.radio("Mode", ["Preview-generate", "Audit existing"], horizontal=True)
+
+    if mode == "Preview-generate":
+        d1, d2 = st.columns(2)
+        with d1:
+            ds_configs = st.multiselect("Antenna configs (N1×N2)", DATASET_CONFIGS,
+                                        default=["4x2"],
+                                        help="Each becomes a per-config shard set.")
+            ds_profiles = st.multiselect("CDL profiles", CDL_MODELS, default=["A", "B", "C"])
+        with d2:
+            ds_n = st.number_input("Samples (preview-capped)", 50, PREVIEW_MAX_SAMPLES, 200, 50)
+            ds_freq = st.number_input("Frequency bins (n_freq)", 32, 512, 128, 32)
+        ds_out = st.text_input("Output directory", "results/webapp_dataset")
+        go_ds = st.button("Generate preview dataset", type="primary", width="stretch")
+        st.caption("Needs the optional `sionna` + `dataset` extras; first run loads "
+                   "TensorFlow. Channels are stored clean (SNR is a train-time aug).")
+        if go_ds:
+            if not ds_configs or not ds_profiles:
+                st.warning("Pick at least one config and one profile.")
+            else:
+                spec = {"configs": ",".join(ds_configs), "profiles": ",".join(ds_profiles),
+                        "n_samples": int(ds_n), "n_rx": int(n_rx),
+                        "freq_res": int(ds_freq), "seed": int(seed), "out": ds_out}
+                with st.spinner("Generating preview dataset (loads TensorFlow on first run)…"):
+                    gen = run_dataset_generate(spec, {"timeout": 1800})
+                st.session_state["ds_gen"] = gen
+                st.session_state.pop("ds_audit", None)
+                if gen["ok"]:
+                    with st.spinner("Auditing the generated dataset…"):
+                        st.session_state["ds_audit"] = run_dataset_audit(
+                            gen["out"], {"max_samples": int(ds_n)})
+    else:
+        ds_dir = st.text_input("Dataset directory to audit", "data/cdl_smoke")
+        if st.button("Audit dataset", type="primary", width="stretch"):
+            with st.spinner("Auditing…"):
+                st.session_state["ds_audit"] = run_dataset_audit(ds_dir, {"max_samples": 2000})
+            st.session_state.pop("ds_gen", None)
+
+    gen = st.session_state.get("ds_gen")
+    if gen is not None:
+        st.divider()
+        if gen["ok"] and gen["manifest"]:
+            m = gen["manifest"]
+            st.success(f"Generated {m['total_samples']} samples → `{gen['out']}` "
+                       f"in {gen['seconds']:.0f}s")
+            rows = [{"config": e["tag"], "ports": e["P"], "samples": e["n_samples"],
+                     "shards": len(e["shards"])} for e in m["configs"]]
+            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+            with st.expander("Manifest JSON"):
+                st.json(m, expanded=False)
+        else:
+            st.error("Dataset generation failed (needs the `sionna` + `dataset` extras).")
+            with st.expander("Show log"):
+                st.code(gen["log"] or "(no output)", language="text")
+
+    audit = st.session_state.get("ds_audit")
+    if audit is not None:
+        st.divider()
+        st.subheader("Audit / diagnostics")
+        if audit["ok"] and audit["png"]:
+            st.image(str(audit["png"]), width="stretch")
+            st.caption(f"Audited in {audit['seconds']:.1f}s")
+            if audit["data"]:
+                tbl = pd.DataFrame(audit["data"]["configs"]).drop(
+                    columns=["ds_monotonicity", "models_present"], errors="ignore")
+                st.dataframe(tbl, width="stretch", hide_index=True)
+                with st.expander("Raw audit JSON"):
+                    st.json(audit["data"], expanded=False)
+        else:
+            st.error("Audit failed.")
+            with st.expander("Show log"):
+                st.code(audit["log"] or "(no output)", language="text")
+
+    if gen is None and audit is None:
+        st.info("Choose a mode and run.")

@@ -136,18 +136,33 @@ class SionnaCDLChannel(ChannelSource):
             perm.extend(ind[order].tolist())
         return np.asarray(perm)
 
-    def generate(self, n_slots: int = 1, rng: np.random.Generator | None = None) -> np.ndarray:
-        """Note: randomness is driven by Sionna/TensorFlow, not by ``rng``."""
+    def _generate_core(self, batch_size: int, n_slots: int) -> np.ndarray:
+        """``batch_size`` independent drops as H[batch, slot, t, rx, port]."""
         a, tau = self._cdl(
-            batch_size=1,
+            batch_size=batch_size,
             num_time_steps=n_slots,
             sampling_frequency=1.0 / self.interval_duration,
         )
         h = self._cir_to_ofdm(self.frequencies, a, tau, normalize=True)
         # (batch, num_rx, num_rx_ant, num_tx, num_tx_ant, time, subcarriers)
-        h = np.asarray(h)[0, 0, :, 0, :, :, :]  # (rx_ant, tx_ant, time, sc)
-        h = h[:, self._port_perm]  # our port ordering
+        h = np.asarray(h)[:, 0, :, 0, :, :, :]  # (batch, rx_ant, tx_ant, time, sc)
+        h = h[:, :, self._port_perm]  # our port ordering (tx_ant axis)
         # average the subcarriers of each PMI frequency unit
         units = [h[..., s].mean(axis=-1) for s in self._unit_slices]
-        h = np.stack(units, axis=-1)  # (rx, port, time, N3)
-        return h.transpose(2, 3, 0, 1)  # (slot, t, rx, port)
+        h = np.stack(units, axis=-1)  # (batch, rx, port, time, N3)
+        return h.transpose(0, 3, 4, 1, 2)  # (batch, slot, t, rx, port)
+
+    def generate(self, n_slots: int = 1, rng: np.random.Generator | None = None) -> np.ndarray:
+        """Note: randomness is driven by Sionna/TensorFlow, not by ``rng``."""
+        return self._generate_core(1, n_slots)[0]  # (slot, t, rx, port)
+
+    def generate_batch(self, batch_size: int, n_slots: int = 1) -> np.ndarray:
+        """``batch_size`` independent UE drops as H[batch, slot, t, rx, port].
+
+        One Sionna/TensorFlow call generates the whole batch, which is what
+        makes GPU dataset generation efficient; ``generate`` is the
+        ``batch_size=1`` special case.  Randomness is driven by TF, not ``rng``.
+        """
+        if batch_size < 1:
+            raise ValueError("batch_size must be >= 1")
+        return self._generate_core(batch_size, n_slots)
