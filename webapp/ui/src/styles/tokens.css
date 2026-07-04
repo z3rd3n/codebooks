@@ -1,0 +1,145 @@
+:root {
+  color-scheme: light;
+
+  /* --- Base palette (light) --- */
+  --bg: #fbfbfd;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f4f4f7;
+  --bg-hover: #f0f0f5;
+  --border: #e3e3ea;
+  --border-strong: #cfcfda;
+
+  --text: #17171f;
+  --text-secondary: #56566b;
+  --text-muted: #86869c;
+  --text-inverse: #ffffff;
+
+  /* --- Accent (indigo) --- */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef0fd;
+  --accent-soft-border: #d6d9fb;
+  --accent-text-on: #ffffff;
+
+  --danger: #dc2626;
+  --danger-soft: #fdecec;
+  --danger-soft-border: #f6c6c6;
+  --success: #15803d;
+  --success-soft: #ecfdf3;
+  --warning: #b45309;
+  --warning-soft: #fef6e7;
+
+  /* --- Release badge colors --- */
+  --r15: #64748b; /* slate */
+  --r15-soft: #f1f5f9;
+  --r16: #0d9488; /* teal */
+  --r16-soft: #ecfdf9;
+  --r17: #b45309; /* amber */
+  --r17-soft: #fef6e7;
+  --r18: #7c3aed; /* violet */
+  --r18-soft: #f4eefe;
+  --r19: #e11d48; /* rose */
+  --r19-soft: #fef1f4;
+
+  /* --- Chart series colors --- */
+  --series-1: #4f46e5;
+  --series-2: #0d9488;
+  --series-3: #b45309;
+  --series-4: #7c3aed;
+  --series-5: #e11d48;
+  --series-6: #0891b2;
+  --series-bound: #9ca3af;
+
+  /* --- Radii & spacing (8px grid) --- */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* --- Typography --- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Helvetica,
+    Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Code", Menlo, Consolas,
+    monospace;
+  --fs-ui: 13px;
+  --fs-content: 15px;
+  --fs-sm: 12px;
+  --fs-lg: 17px;
+  --fs-xl: 22px;
+  --fs-2xl: 30px;
+  --fs-3xl: 40px;
+  --lh-ui: 1.4;
+  --lh-content: 1.7;
+
+  /* --- Shadows: kept extremely subtle, hairline-first design --- */
+  --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.04);
+  --shadow-md: 0 4px 16px rgba(20, 20, 40, 0.08);
+  --shadow-popover: 0 8px 30px rgba(20, 20, 40, 0.14);
+
+  --sidebar-width: 220px;
+  --sidebar-width-collapsed: 60px;
+  --content-max: 1180px;
+
+  --transition-fast: 120ms ease;
+  --transition: 180ms ease;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f0f14;
+  --bg-raised: #17171f;
+  --bg-sunken: #0b0b0f;
+  --bg-hover: #1e1e29;
+  --border: #2a2a37;
+  --border-strong: #3a3a4a;
+
+  --text: #f2f2f7;
+  --text-secondary: #b3b3c4;
+  --text-muted: #7c7c8f;
+  --text-inverse: #17171f;
+
+  --accent: #818cf8;
+  --accent-hover: #a5b0fa;
+  --accent-soft: #1f2050;
+  --accent-soft-border: #33357a;
+  --accent-text-on: #0f0f14;
+
+  --danger: #f87171;
+  --danger-soft: #3a1a1a;
+  --danger-soft-border: #5c2626;
+  --success: #4ade80;
+  --success-soft: #123321;
+  --warning: #fbbf24;
+  --warning-soft: #3a2b0d;
+
+  --r15: #94a3b8;
+  --r15-soft: #23283a;
+  --r16: #2dd4bf;
+  --r16-soft: #0c2c29;
+  --r17: #fbbf24;
+  --r17-soft: #3a2b0d;
+  --r18: #a78bfa;
+  --r18-soft: #271f4a;
+  --r19: #fb7185;
+  --r19-soft: #3a1420;
+
+  --series-1: #818cf8;
+  --series-2: #2dd4bf;
+  --series-3: #fbbf24;
+  --series-4: #a78bfa;
+  --series-5: #fb7185;
+  --series-6: #22d3ee;
+  --series-bound: #5b5b6d;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.45);
+  --shadow-popover: 0 8px 34px rgba(0, 0, 0, 0.55);
+}

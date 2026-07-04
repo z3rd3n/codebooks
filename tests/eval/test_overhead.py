@@ -62,9 +62,17 @@ class TestF2Claims:
         K_NZ coefficient payload) is not amortized by a single beam.  The
         paper's Fig. f2 bars show the opposite ordering, which is not
         derivable from its own bit tables (erratum 4 territory; see README
-        errata)."""
+        errata).
+
+        Caveat (spec audit): the inversion is a property of the paper's
+        fixed K^NZ = 20 convention, which is spec-infeasible at L = 1 where
+        K^NZ <= 2*K0 = 2*ceil(beta*2L*M1) = 10; at any feasible budget R16
+        stays below R15."""
         data = f2_comparison(F2_ANT)
         assert data["R16 Regular"][0] > data["R15 Regular"][0]
+        # spec-feasible maximum at L = 1: K0 = 5, K^NZ <= 10 -> no inversion
+        feasible = 4 * sum(r16_bits(F2_ANT, L=1, v=2, N3=18, Mv=5, K_nz=10).values())
+        assert feasible < data["R15 Regular"][0]  # 464 < 488
 
     def test_r15_gap_grows_with_subband_count(self):
         """Per-subband reporting is R15's cost driver; FD compression decouples

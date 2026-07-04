@@ -1,0 +1,58 @@
+{
+  "id": "etype2-r16",
+  "name": "Enhanced Type II (eType II)",
+  "shortName": "eType II",
+  "release": "R16",
+  "specClause": "TS 38.214 §5.2.2.2.5 / §5.2.2.2.6",
+  "docFile": "04-etype2-r16.md",
+  "position": 5,
+  "lineage": {"parent": "type2-r15", "adds": "delay-domain (frequency) compression — a handful of DFT delay taps replace the per-subband coefficient block"},
+  "tagline": "Notice that a beam's weight barely changes from one nearby frequency to the next, and send the recipe for that smooth curve instead of a fresh number every subband.",
+  "overview": [
+    "Type II R15's biggest cost is that it reports a fresh coefficient for every beam, on every subband. But those coefficients aren't random from one subband to the next — as a function of frequency, each beam's weight traces a smooth curve, and that curve is the physical signature of a small number of radio-wave **delays** (echoes arriving at slightly different times). Enhanced Type II's insight is to send the *recipe* for that curve instead of sampling it everywhere: a handful of delay-domain DFT (discrete Fourier transform) coefficients that the receiver expands back into all $N_3$ subbands. This is the single most important compression trick in the whole Type II lineage — every later release keeps it.",
+    "Concretely, each beam-polarization coefficient becomes a small sum over $M_v$ **delay taps**, found the same way as the spatial beams: measure the target's frequency response, take a forward FFT (fast Fourier transform) to move into the delay domain, and keep only the few taps with real energy. The amplitude machinery is also refined: rather than R15's single 3-bit amplitude scale, R16 splits each coefficient's magnitude into a coarser **per-polarization reference** amplitude (4 bits) and a finer per-coefficient **differential** amplitude (3 bits) — since the differential table has no true zero level, a separate **bitmap** now marks which coefficients are actually kept.",
+    "How much compression to apply is governed by a single dial: the **parameter combination** (`paramCombination-r16`), an RRC-signalled (radio resource control) preset of the beam count $L$, the tap-count fraction $p_v$, and the coefficient budget fraction $\\beta$. Combination 1 is the cheapest — 2 beams, only a quarter of the subbands' worth of taps kept, a quarter of the coefficient budget — while combination 8 is the richest, with 6 beams and three-quarters of the budget. This chapter also covers the **port-selection** variant (§5.2.2.2.6), identical machinery but built on selected ports instead of DFT beams.",
+    "The result is dramatic: for a typical configuration, moving from R15 to R16 collapses the per-subband phase block — which dominated R15's cost — down to a tiny tap index plus a bitmap-localized coefficient set. The one place this backfires is at $L=1$ (not in the standardized table but reachable via generalized parameter sweeps): with only one beam, R16's fixed per-tap machinery isn't amortized and can cost more than R15 for the same accuracy."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel and aligns phase across frequency", "body": "The phone estimates the channel via CSI-RS (channel state information reference signal), computes per-subband eigenvector targets, and rotates them to a consistent phase reference across frequency so the delay transform stays clean."},
+    {"title": "UE selects beams exactly as in R15", "body": "The same energy-capture group-and-beam search picks $L$ DFT beams (or, in the port-selection variant, a starting port), governed by the chosen parameter combination."},
+    {"title": "UE compresses each beam's frequency response into delay taps", "body": "For each beam and layer, the UE takes a forward FFT of the least-squares coefficients across subbands, keeps the $M_v$ most energetic delay taps, and encodes their positions with a combinatorial index."},
+    {"title": "UE quantizes amplitude, phase, and a nonzero-coefficient bitmap", "body": "The strongest coefficient becomes the fixed reference; the rest get a per-polarization reference amplitude, a per-coefficient differential amplitude, and a 16-PSK (phase-shift keying) phase, with a bitmap marking which coefficients survive the coefficient budget."},
+    {"title": "Report travels over the uplink", "body": "The beam indices, tap indices, bitmap, and quantized amplitudes/phases — far smaller than R15's per-subband block — form the PMI (precoding matrix indicator) sent to the gNB."},
+    {"title": "gNB expands the taps back to every subband and transmits", "body": "The base station (gNB) regenerates the full frequency response from the few reported delay taps via the DFT, reconstructs each subband's precoder, and transmits."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "Which orthogonal beam group the L beams are drawn from (or, in port selection, the starting port).", "detail": "Same role as R15's rotation indicator $(q_1,q_2)$; in the port-selection variant it collapses to a single initial-port index."},
+    {"field": "i12", "plain": "Which L specific beams within that group.", "detail": "Combinatorial index selecting the L beams, wideband, absent in the port-selection variant."},
+    {"field": "i16", "plain": "Which delay taps carry the beam's frequency response, per layer.", "detail": "A combinatorial index (Algorithm 3) over the $M_v-1$ non-strongest delay taps; for $N_3 > 19$ this pairs with a shared window-origin index i15."},
+    {"field": "i17", "plain": "A bitmap marking which beam/tap coefficients are actually nonzero, per layer.", "detail": "Since the differential amplitude table has no true zero, a bitmap is required to switch coefficients off — this replaces R15's amplitude-0 convention."},
+    {"field": "i18", "plain": "Which coefficient is the strongest, per layer.", "detail": "A dual-mode indicator: at rank 1 it is the position among nonzero tap-0 bitmap bits (cheaper when few beams are active); at higher rank it is the index directly."},
+    {"field": "i23", "plain": "The per-polarization reference amplitude, per layer.", "detail": "A 4-bit index for each polarization's coarse amplitude scale; the strongest polarization's value is fixed and not reported, so only one value per layer is actually sent."},
+    {"field": "i24", "plain": "The finer differential amplitude for each kept coefficient.", "detail": "A 3-bit index refining the coefficient's magnitude relative to its polarization's reference amplitude."},
+    {"field": "i25", "plain": "The 16-PSK phase for each kept coefficient.", "detail": "A 4-bit phase index, finer than R15's 8-PSK, refreshed only per delay tap rather than per subband."}
+  ],
+  "parametersExplained": [
+    {"key": "param_combination", "plain": "A preset (1-8) bundling how many beams, how many delay taps, and how large a coefficient budget to use.", "guidance": "Pick a low combination (1-2) to see the accuracy cost of a tight bit budget; combinations 7-8 (L=6 beams) need at least 32 ports and are unavailable if any rank above 2 is allowed."},
+    {"key": "port_selection", "plain": "Whether to use DFT beams (off) or selected ports (on) as the spatial basis.", "guidance": "Turn on only for beamformed/reciprocity CSI-RS deployments; port-selection restricts you to parameter combinations 1-6 (no L=6 rows)."},
+    {"key": "d", "plain": "The stride between consecutively selected ports (port-selection variant).", "guidance": "Only relevant with port_selection on."}
+  ],
+  "strengths": [
+    "Collapses the R15 per-subband phase block into a handful of delay taps — dramatically fewer bits at similar accuracy.",
+    "Handles frequency-selective (multipath-rich) channels naturally, since that is exactly what the delay taps model.",
+    "Scales to ranks 1-4, twice R15's range.",
+    "The bitmap-based coefficient budget lets weak beams contribute fewer bits than strong ones automatically."
+  ],
+  "limitations": [
+    "The fixed per-tap and bitmap overhead is not amortized well at very low beam counts (L=1), where it can cost more than R15.",
+    "The R=2 half-subband PRB-mapping rules are not modeled — only the frequency-unit count is.",
+    "Codebook subset restriction enforces the functional beam prohibition but not the exact spec amplitude-cap semantics in every corner case.",
+    "Still costs substantially more than Type I — this is a mid-tier accuracy/overhead point, not the cheapest option."
+  ],
+  "whenToUse": "Use eType II when the channel is frequency-selective and R15's per-subband cost is too high but you still want near-R15 accuracy — this is the workhorse Type II codebook for realistic multipath deployments.",
+  "mathHighlight": {
+    "caption": "Each beam's per-subband coefficient is generated from just M_v delay taps via a DFT, instead of being reported directly for every subband.",
+    "latex": "\\sum_{f=0}^{M_v-1} y_{t,l}^{(f)}\\, p^{(2)}_{l,i,f}\\, \\varphi_{l,i,f}, \\qquad y_{t,l}^{(f)} = e^{\\,j2\\pi t\\, n_{3,l}^{(f)}/N_3}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "DFT beam", "delay tap", "N3", "subband", "rank/layer", "overhead bits", "param combination", "dual polarization"]
+}

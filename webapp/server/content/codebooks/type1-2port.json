@@ -1,0 +1,49 @@
+{
+  "id": "type1-2port",
+  "name": "Type I Single-Panel, 2-Port",
+  "shortName": "Type I (2-port)",
+  "release": "R15",
+  "specClause": "TS 38.214 §5.2.2.2.1, Table 5.2.2.2.1-1",
+  "docFile": "01-type1-single-panel.md",
+  "position": 1,
+  "lineage": {"parent": null, "adds": "the smallest possible standardized precoder report — a 2-3 bit index into a fixed table"},
+  "tagline": "The cheapest possible channel report: for a 2-antenna base station, just pick one of a handful of fixed precoders.",
+  "overview": [
+    "Imagine the simplest possible walkie-talkie tuning knob: instead of describing exactly where the signal is coming from, you just pick one of four or six pre-agreed settings and tell the other side which one. That is what this codebook does for a base station (**gNB**, the 5G tower) with only **2 antenna ports**. Because there are so few ports, the 3GPP standard (3rd Generation Partnership Project) does not bother with the general beam-search machinery used everywhere else in this family — it defines a small, fixed lookup table (Table 5.2.2.2.1-1) shared with 4G LTE, and the phone (**UE**, user equipment) just reports an index into it.",
+    "For one data stream (**rank** 1) there are exactly four choices, each combining the two antennas with a different **QPSK** (quadrature phase-shift keying, a 4-point phase wheel) rotation: in-phase, 90 degrees, 180 degrees, or 270 degrees. For two simultaneous streams (rank 2) there are only two choices. The UE tries every option against its measured channel and reports whichever one would carry the most data, together with an optional restriction bitmap the network can use to permanently forbid certain choices.",
+    "This is not a scaled-down version of the general Type I codebook described in the next entry — it is architecturally distinct. There is no oversampled beam grid, no beam index pair, nothing to \"combine.\" The entire wideband and per-frequency-unit report **is** the table index. That makes it an excellent baseline: it shows how few bits a channel report can cost when the antenna array is minimal, and it is the floor against which every other, richer codebook in this catalog should be measured.",
+    "Because the table is fixed by the standard, precision is limited: the codebook cannot describe any direction the four (or two) built-in options don't already cover. It exists purely for small, low-cost deployments or legacy-compatible base stations — not because it is a good general-purpose codebook."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the 2-port channel", "body": "The phone estimates the radio channel from the two reference-signal ports using CSI-RS (channel state information reference signal), the tower's known pilot transmission."},
+    {"title": "UE scores every table entry", "body": "Instead of searching a beam grid, the UE simply evaluates all four rank-1 (or two rank-2) fixed precoders from Table 5.2.2.2.1-1 against the measured channel and picks the one that maximizes the achievable data rate at a nominal SNR (signal-to-noise ratio)."},
+    {"title": "UE reports one index per frequency unit", "body": "The chosen table index becomes the entire PMI (precoding matrix indicator) report for that frequency unit — 2 bits at rank 1, 1 bit at rank 2. There is no separate wideband/subband split because the table is small enough to report directly per unit."},
+    {"title": "Report travels over the uplink", "body": "This tiny index is sent back to the gNB as part of the regular CSI feedback, alongside the rank indicator and channel quality indicator (not modeled by this codebook)."},
+    {"title": "gNB looks up the precoder", "body": "The gNB reads the index and looks up the exact matrix from the same fixed table — no reconstruction math needed beyond a table lookup."},
+    {"title": "gNB transmits with the chosen precoder", "body": "The base station applies the selected 2x1 (or 2x2) matrix to the two antenna ports and transmits the data stream(s)."}
+  ],
+  "whatIsReported": [
+    {"field": "i2", "plain": "Which table entry was picked, for each frequency unit.", "detail": "A per-PMI-frequency-unit index into Table 5.2.2.2.1-1: values 0-3 at rank 1 (four QPSK-rotated precoders) or 0-1 at rank 2 (two precoders). This single field is the entire PMI."}
+  ],
+  "parametersExplained": [
+    {"key": "rank", "plain": "How many independent data streams to send at once: 1 or 2.", "guidance": "Rank 1 is the only option with the full four-way table; rank 2 halves the choices to two. Start at rank 1 to see the codebook's cleanest behavior."}
+  ],
+  "strengths": [
+    "Smallest possible report: 1-2 bits per frequency unit, nothing else to send.",
+    "Zero computation at the gNB — reconstruction is a table lookup, not a formula.",
+    "Shares its table with legacy LTE precoding, easing backward compatibility.",
+    "A clean, minimal baseline for comparing every richer codebook's overhead."
+  ],
+  "limitations": [
+    "Only meaningful for exactly 2 antenna ports — cannot scale to larger arrays.",
+    "Only four (rank 1) or two (rank 2) precoders exist in total; no fine angular resolution.",
+    "No per-subband adaptation of direction, only of the coarse phase choice.",
+    "Coarseness means it leaves significant spectral efficiency on the table versus any beam-searching codebook."
+  ],
+  "whenToUse": "Use this codebook as the theoretical floor-of-feedback baseline, or when modeling a genuinely 2-port deployment (e.g. a small cell or legacy-compatible base station) where the array is too small for beam selection to matter.",
+  "mathHighlight": {
+    "caption": "At rank 1, the precoder is just one of four fixed 2-element vectors, differing only by a QPSK phase rotation between the two antenna ports.",
+    "latex": "W^{(1)} = \\frac{1}{\\sqrt{2}}\\begin{bmatrix}1\\\\ \\phi\\end{bmatrix},\\qquad \\phi \\in \\{1,\\ j,\\ -1,\\ -j\\}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "rank/layer", "QPSK", "SNR", "precoder", "port"]
+}

@@ -1,0 +1,54 @@
+{
+  "id": "predicted-ps-r18",
+  "name": "Further-Enhanced Type II Port Selection for Predicted PMI",
+  "shortName": "Predicted PS",
+  "release": "R18",
+  "specClause": "TS 38.214 §5.2.2.2.11",
+  "docFile": "05-fetype2-r17.md",
+  "position": 7,
+  "lineage": {"parent": "fetype2-r17", "adds": "framing the exact same port-selection report as a prediction for one future slot interval"},
+  "tagline": "The same free-port-selection report as R17 — but explicitly labeled as a forecast for a moment slightly in the future, not a description of right now.",
+  "overview": [
+    "A weather forecast for \"tomorrow at noon\" uses the same units and format as a report of \"right now\" — what changes is the intent: it is a prediction, not a snapshot. This codebook is exactly that relationship to R17's further-enhanced Type II port selection. It reuses the identical reconstruction formula, the identical free port-selection index, the identical tiny reciprocity-based tap window, and the identical amplitude/phase/bitmap machinery. The only difference is that the report is understood to describe **one future slot interval** rather than the present one — the single-interval special case ($N_4 = 1$) of the fuller Doppler-prediction machinery covered elsewhere in this catalog.",
+    "Because a moving phone's channel changes between the moment it measures CSI-RS (channel state information reference signal) and the moment the base station (**gNB**) actually transmits with the reported precoder, feedback inevitably describes a slightly stale channel — a problem known as **CSI aging**. Release 18 addresses this in two ways: a genuinely multi-interval Doppler-compressed report (covered by the eType II Doppler codebook in this catalog), and this simpler degenerate case, which keeps R17's cheap reciprocity-based report but frames it explicitly as a one-step-ahead prediction with its own configuration guards.",
+    "The parameter machinery — tap count $M$, port fraction $\\alpha$, coefficient budget $\\beta$ — and the amplitude/phase tables are all inherited unchanged from R17. What this codebook adds on top is a dedicated rank-restriction bitmap for the predicted-PMI context and an $R$ (subband-pairing) guard, both purely configuration-level additions; the reconstruction math and the UE-side selection algorithm are inherited verbatim.",
+    "This is a useful entry point for understanding what \"predicted PMI\" means at its simplest: nothing about the per-report math changes, only the interpretation of what moment in time the report describes and the accompanying scheduling guards around it."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel for a near-future interval", "body": "Rather than the current instant, the UE's measurement (or its prediction pipeline) targets one future slot interval that the report will describe when it is eventually used by the gNB."},
+    {"title": "UE freely selects the strongest ports", "body": "Exactly as in R17: any L of the P/2 ports per polarization are ranked by energy and selected via a general combinatorial index — no fixed stride."},
+    {"title": "UE finds at most one extra delay tap", "body": "The same reciprocity-based assumption applies: tap 0 is the reference, and only a tiny window is searched for a possible second tap."},
+    {"title": "UE quantizes amplitude, phase, and the coefficient bitmap", "body": "Identical R16/R17 quantization: per-polarization reference amplitude, per-coefficient differential amplitude, 16-PSK (phase-shift keying) phase, and a bitmap of which coefficients are kept."},
+    {"title": "Report travels over the uplink", "body": "The same PMI (precoding matrix indicator) fields as R17 are sent, now understood by the network to describe the predicted future interval rather than the present one."},
+    {"title": "gNB reconstructs for the predicted interval and transmits", "body": "The base station rebuilds the precoder exactly as in R17 and applies it when transmitting during the predicted interval, hopefully closer to the true channel than a now-stale earlier report would have been."}
+  ],
+  "whatIsReported": [
+    {"field": "i12", "plain": "Which L ports (out of P/2) were freely selected, per polarization.", "detail": "Identical to R17: a general combinatorial index over any port subset, reported only when alpha < 1."},
+    {"field": "i16", "plain": "The offset of the second delay tap, if used.", "detail": "Identical to R17: only reported when M=2 and the window is wide enough to need an explicit offset."},
+    {"field": "i17", "plain": "A bitmap marking which port/tap coefficients are nonzero, per layer.", "detail": "Identical mechanism to R17, now covering the coefficients that describe the predicted interval."},
+    {"field": "i18", "plain": "Which coefficient is the strongest, per layer.", "detail": "Identical dual-mode strongest-coefficient indicator inherited from R16/R17."},
+    {"field": "i23", "plain": "The per-polarization reference amplitude, per layer.", "detail": "Identical to R17's 4-bit-per-polarization reference amplitude mechanism."}
+  ],
+  "parametersExplained": [
+    {"key": "param_combination", "plain": "The same (M, alpha, beta) preset table as R17.", "guidance": "Choose exactly as you would for R17 — the parameter semantics are unchanged."},
+    {"key": "n_window", "plain": "The size of the second-tap search window, when M=2.", "guidance": "Same guidance as R17."}
+  ],
+  "strengths": [
+    "Directly targets CSI aging with essentially no extra reporting cost over R17.",
+    "Inherits R17's free port selection and tiny reciprocity tap window unchanged.",
+    "Simple mental model: it is R17, relabeled for a one-step-ahead prediction.",
+    "A natural stepping stone to the fuller multi-interval Doppler-compressed prediction codebook."
+  ],
+  "limitations": [
+    "Predicts only a single future interval — it has no temporal (Doppler) compression axis of its own.",
+    "Prediction quality depends entirely on how good the UE's forecast of the future channel is; the codebook itself assumes that forecast is available.",
+    "Inherits every R17 limitation: TDD reciprocity assumption, no DFT beam search, R not applied to reconstruction.",
+    "The exact slot-interval timing and scheduling machinery around when the prediction applies is not modeled by the codebook math itself."
+  ],
+  "whenToUse": "Use this codebook to explore the cheapest form of predicted CSI feedback — when a single future interval's prediction is enough and you want R17's low overhead rather than the full multi-interval Doppler codebook's larger report.",
+  "mathHighlight": {
+    "caption": "The reconstruction formula is identical to R17's; only the temporal interpretation of the report differs.",
+    "latex": "\\sum_{i=0}^{L-1} v_{m^{(i)}}\\, p^{(1)}_{l,0}\\, \\sum_{f=0}^{M-1} y_t^{(f)}\\, p^{(2)}_{l,i,f}\\, \\varphi_{l,i,f}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "port selection", "delay tap", "Doppler", "N3", "rank/layer", "overhead bits"]
+}

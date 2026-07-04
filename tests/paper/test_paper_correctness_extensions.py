@@ -54,14 +54,18 @@ class TestUnsupportedRankRejection:
 
     @pytest.mark.parametrize("combo", [7, 8])
     def test_r16_rank34_rejected(self, combo):
-        antenna = AntennaConfig.standard(4, 2)
-        cbk = R16Type2Codebook(antenna, N3=self.N3, param_combination=combo)
+        # combos 7/8 are configurable only at P = 32 with ranks 3-4 disallowed
+        # (5.2.2.2.5), so a 32-port array and a restrictive RI bitmap are used.
+        antenna = AntennaConfig.standard(4, 4)
+        cbk = R16Type2Codebook(
+            antenna, N3=self.N3, param_combination=combo, ri_restriction=[1, 1, 0, 0]
+        )
         with pytest.raises(ValueError):
             cbk.Mv(3)
         with pytest.raises(ValueError):
             cbk.Mv(4)
         # n_rx = 4 lets the eigen-target step succeed so selection actually
-        # reaches the Mv() call that raises (rather than failing earlier).
+        # reaches the guard that raises (rather than failing earlier).
         H = complex_channel(11000 + combo, 1, self.N3, 4, antenna.P)
         with pytest.raises(ValueError):
             cbk.select(H, rank=3)
@@ -75,8 +79,13 @@ class TestUnsupportedRankRejection:
 
     @pytest.mark.parametrize("combo", [8, 9])
     def test_r18_rank34_rejected(self, combo):
-        antenna = AntennaConfig.standard(4, 2)
-        cbk = R18Type2Codebook(antenna, N3=self.N3, N4=2, param_combination=combo)
+        # combos 8/9 are configurable only at P = 32 with ranks 3-4 disallowed
+        # (5.2.2.2.10), mirroring the R16 case above.
+        antenna = AntennaConfig.standard(4, 4)
+        cbk = R18Type2Codebook(
+            antenna, N3=self.N3, N4=2, param_combination=combo,
+            ri_restriction=[1, 1, 0, 0],
+        )
         with pytest.raises(ValueError):
             cbk.Mv(3)
         with pytest.raises(ValueError):
@@ -104,11 +113,12 @@ _N3 = 8  # <= 19 keeps the delay codec single-level (no i15)
 
 
 def _r16_combo(antenna: AntennaConfig) -> int:
-    """Largest paramCombination-r16 whose L fits the N1*N2 beam group."""
+    """Largest paramCombination-r16 whose L fits the N1*N2 beam group and
+    passes the configuration bars of 5.2.2.2.5 (7/8 need P >= 32)."""
     npp = antenna.n_ports_per_pol
-    if npp >= 6:
+    if npp >= 6 and antenna.P >= 32:
         return 7  # L = 6
-    if npp >= 4:
+    if npp >= 4 and antenna.P > 4:
         return 4  # L = 4
     return 1  # L = 2
 
@@ -120,10 +130,12 @@ def _r16_ps_combo(antenna: AntennaConfig) -> int:
 
 
 def _r18_combo(antenna: AntennaConfig) -> int:
+    """Largest paramCombination-Doppler-r18 allowed by 5.2.2.2.10 (8/9 need
+    P >= 32; 4-9 barred at P = 4)."""
     npp = antenna.n_ports_per_pol
-    if npp >= 6:
+    if npp >= 6 and antenna.P >= 32:
         return 8  # L = 6
-    if npp >= 4:
+    if npp >= 4 and antenna.P > 4:
         return 3  # L = 4
     return 2  # L = 2
 
@@ -131,8 +143,15 @@ def _r18_combo(antenna: AntennaConfig) -> int:
 def _build_case(family: str, antenna: AntennaConfig, rank: int, seed: int):
     """Return (codebook, oracle_fn, channel) for one reconstruction node."""
     n_rx = max(rank, 2)
+    # the barred high-overhead rows (R16 7/8, R18 8/9, R17 5 at P=4) are only
+    # configurable when ranks 3-4 are disallowed; ranks here are 1-2 anyway.
+    ri12 = [1, 1, 0, 0]
     if family == "r16":
-        cbk = R16Type2Codebook(antenna, N3=_N3, param_combination=_r16_combo(antenna))
+        combo = _r16_combo(antenna)
+        cbk = R16Type2Codebook(
+            antenna, N3=_N3, param_combination=combo,
+            ri_restriction=ri12 if combo in (7, 8) else None,
+        )
         H = complex_channel(seed, 1, _N3, n_rx, antenna.P)
         return cbk, r16_precoder, H
     if family == "r16_ps":
@@ -143,11 +162,18 @@ def _build_case(family: str, antenna: AntennaConfig, rank: int, seed: int):
         return cbk, r16_precoder, H
     if family == "r17":
         # combo 5: alpha = 1/2 (free port selection exercised via i12), M = 2.
-        cbk = R17Type2Codebook(antenna, N3=_N3, param_combination=5, N_window=4)
+        cbk = R17Type2Codebook(
+            antenna, N3=_N3, param_combination=5, N_window=4,
+            ri_restriction=ri12 if antenna.P == 4 else None,
+        )
         H = complex_channel(seed, 1, _N3, n_rx, antenna.P)
         return cbk, r17_precoder, H
     if family == "r18":
-        cbk = R18Type2Codebook(antenna, N3=_N3, N4=2, param_combination=_r18_combo(antenna))
+        combo = _r18_combo(antenna)
+        cbk = R18Type2Codebook(
+            antenna, N3=_N3, N4=2, param_combination=combo,
+            ri_restriction=ri12 if combo in (8, 9) else None,
+        )
         H = complex_channel(seed, 2, _N3, n_rx, antenna.P)
         return cbk, r18_precoder, H
     raise AssertionError(f"unknown family {family}")

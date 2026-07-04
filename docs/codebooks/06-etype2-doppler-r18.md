@@ -106,12 +106,11 @@ The number of delay taps is $M_\upsilon = \lceil p_\upsilon N_3 / R\rceil$
 ([config.py](../../src/nr_csi/config.py) `m_v`), and $M_1$ denotes $M_\upsilon$ at
 $\upsilon=1$.
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** The clause's
-> configuration restrictions on `paramCombination-Doppler-r18` are not enforced by
-> `R18Type2Codebook.__init__`: combos **4–9 forbidden when $P_{CSI\text{-}RS}=4$**;
-> **8–9 forbidden when $P_{CSI\text{-}RS}<32$**; **8–9 forbidden when any
-> $r_i=1$ for $i>1$** in the RI-restriction; **8–9 forbidden when $R=2$**. The code
-> accepts any of `1..9` regardless of ports, $R$, or RI restriction.
+The clause's configuration restrictions on `paramCombination-Doppler-r18` are
+enforced by `R18Type2Codebook.__init__`: combos **4–9 forbidden when
+$P_{CSI\text{-}RS}=4$**; **8–9 forbidden when $P_{CSI\text{-}RS}<32$**, **when
+any $r_i=1$ for $i>1$** in the RI-restriction, or **when $R=2$**. Tests:
+[test_restriction_guards.py](../../tests/spec/test_restriction_guards.py).
 
 ### 2.2 $N_4$ — the prediction window
 
@@ -437,7 +436,7 @@ not correspond to any precoder with $\upsilon=i+1$ layers; the UE shall not repo
 $\upsilon>4$. Implemented as `ri_restriction` (a 4-element bool array, indexed
 `ri_restriction[rank-1]`); `select` raises if the requested rank is prohibited.
 The coupled param-combo restriction ("8/9 forbidden when $r_i=1$ for any $i>1$")
-is **[not implemented]** (see §2.1).
+is enforced at construction (see §2.1).
 
 ---
 

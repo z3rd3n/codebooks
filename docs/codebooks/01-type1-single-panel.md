@@ -57,26 +57,30 @@ free quantities at rank 1.
 
 ## 2. The 2-antenna-port special case (Table 5.2.2.2.1-1)
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** The 2-port codebook
-> (`{3000,3001}`, $P=2$) and its dedicated restriction bitmap.
-
 For exactly **2 CSI-RS ports** the spec does *not* use the DFT-beam machinery
 below. Each PMI value is a single codebook index into **Table 5.2.2.2.1-1**, the
 small fixed Householder-style codebook shared with LTE:
 
-| Codebook index $i_2$ | 1 layer $W^{(1)}$ (unnormalized) | 2 layers $W^{(2)}$ (unnormalized) |
+| Codebook index $i_2$ | 1 layer $W^{(1)}$ | 2 layers $W^{(2)}$ |
 |---|---|---|
-| 0 | $\begin{bmatrix}1\\1\end{bmatrix}$ | $\tfrac{1}{\sqrt2}\begin{bmatrix}1&1\\1&-1\end{bmatrix}$ |
-| 1 | $\begin{bmatrix}1\\-1\end{bmatrix}$ | $\tfrac{1}{\sqrt2}\begin{bmatrix}1&1\\j&-j\end{bmatrix}$ |
-| 2 | $\begin{bmatrix}1\\j\end{bmatrix}$ | — |
-| 3 | $\begin{bmatrix}1\\-j\end{bmatrix}$ | — |
+| 0 | $\tfrac{1}{\sqrt2}\begin{bmatrix}1\\1\end{bmatrix}$ | $\tfrac{1}{2}\begin{bmatrix}1&1\\1&-1\end{bmatrix}$ |
+| 1 | $\tfrac{1}{\sqrt2}\begin{bmatrix}1\\j\end{bmatrix}$ | $\tfrac{1}{2}\begin{bmatrix}1&1\\j&-j\end{bmatrix}$ |
+| 2 | $\tfrac{1}{\sqrt2}\begin{bmatrix}1\\-1\end{bmatrix}$ | — |
+| 3 | $\tfrac{1}{\sqrt2}\begin{bmatrix}1\\-j\end{bmatrix}$ | — |
 
-(rank-1 vectors carry the $1/\sqrt2$ norm factor). The associated restriction
-bitmap is **`twoTX-CodebookSubsetRestriction`**: bits 0–3 gate the four rank-1
-indices, bits 4–5 the two rank-2 indices; a zero bit forbids that precoder. None
-of this is in the code — `Type1Codebook` requires the UPA path (it computes
-$P = 2\,N_1 N_2$ from `AntennaConfig` and there is no $P=2$ table). The smallest
-configuration the code accepts is $(N_1,N_2)=(2,1)$, i.e. $P=4$.
+The associated restriction bitmap is **`twoTX-CodebookSubsetRestriction`**
+($a_5\ldots a_0$): bits 0–3 gate the four rank-1 indices, bits 4–5 the two
+rank-2 indices; a zero bit forbids that precoder.
+
+**Code:** class
+[`TwoPortType1Codebook`](../../src/nr_csi/codebooks/type1.py) — a separate
+class because `Type1Codebook`'s UPA path computes $P = 2\,N_1 N_2$ from
+`AntennaConfig` and starts at $(N_1,N_2)=(2,1)$, i.e. $P=4$. The PMI is one
+per-frequency-unit index array `i2` (2 bits/unit at rank 1, 1 bit at rank 2);
+`restriction` takes the 6-bit `twoTX` bitmap `[a0..a5]` and `rank_restriction`
+the 2-bit slice of `typeI-SinglePanel-ri-Restriction`. The serializer
+(`pack`/`unpack`) covers it. Tests:
+[test_type1_2port.py](../../tests/codebooks/test_type1_2port.py).
 
 ---
 
@@ -488,7 +492,7 @@ times the feedback cost.
 
 | Spec feature | Status |
 |---|---|
-| 2-port codebook (Table 5.2.2.2.1-1) + `twoTX-CodebookSubsetRestriction` | 🚩 not implemented |
+| 2-port codebook (Table 5.2.2.2.1-1) + `twoTX-CodebookSubsetRestriction` | implemented (`TwoPortType1Codebook`) |
 | Ranks 1–8 UPA constructions ($P\ge4$), Mode 1 | implemented |
 | codebookMode 2 (rank 1–2 fine-offset $i_2$) | implemented |
 | Tables 5.2.2.2.1-2/-3/-4 (configs, $i_{1,3}$ offsets) | implemented |

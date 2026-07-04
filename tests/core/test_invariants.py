@@ -48,7 +48,15 @@ def make_schemes(ant: AntennaConfig):
         (R15Type2Codebook(ant, N3=N3, L=2), validate_r15),
         (R15Type2Codebook(ant, N3=N3, L=2, port_selection=True, d=2), validate_r15),
         (R16Type2Codebook(ant, N3=N3, param_combination=2), validate_r16),
-        (R17Type2Codebook(ant, N3=N3, param_combination=5), validate_r17),
+        # combo 5 at P = 4 requires ranks 3-4 disallowed (5.2.2.2.7); the
+        # tests here use ranks 1-2 only.
+        (
+            R17Type2Codebook(
+                ant, N3=N3, param_combination=5,
+                ri_restriction=[1, 1, 0, 0] if ant.P == 4 else None,
+            ),
+            validate_r17,
+        ),
         (R18Type2Codebook(ant, N3=N3, N4=2, param_combination=2), validate_r18),
     ]
 

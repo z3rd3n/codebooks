@@ -1,11 +1,11 @@
 """Release-19 Refined Type I Single-Panel codebook, TS 38.214 5.2.2.2.1a.
 
 'typeI-SinglePanel-r19' for the large arrays of Table 5.2.2.2.1a-1 (48/64/128
-ports, O1 = O2 = 4).  This module implements **codebookMode 'modeA'**, ranks
-1-8.
+ports, O1 = O2 = 4), ranks 1-8, both codebookMode-r19 values.
 
-The per-layer precoding matrices W^(v) (Table 5.2.2.2.1a-4) reuse the *same*
-column patterns as the Release-15 Type I codebook (clause 5.2.2.2.1):
+**modeA** -- the per-layer precoding matrices W^(v) (Table 5.2.2.2.1a-4) reuse
+the *same* column patterns as the Release-15 Type I codebook (clause
+5.2.2.2.1):
 
     phi_n = e^{j pi n / 2},  v_{l,m} the length-N1*N2 oversampled DFT beam,
     and each column is [b ; +-phi_n b] for a selected beam b.
@@ -19,18 +19,31 @@ The Release-19 *refinement* is the beam selection, not the column pattern:
   Table 5.2.2.2.1a-3:
       l^(j) = o1 * i_{1,1,j} + k1,   m^(j) = o2 * i_{1,2,j} + k2.
 
-'modeB' (a per-layer / combinatorial beam selection) and the Refined Type I
-Multi-Panel codebook (5.2.2.2.2a) are not implemented here.
+**modeB** -- every layer carries a single beam column [b_l ; phi_{c_l} b_l]
+(Table 5.2.2.2.1a-7) with a common orthogonal group i_{1,1} = [q1 q2]:
+
+* ranks 1-4 select one beam *per layer* inside the group, i_{1,2,l} with
+  n^(l) = N1*N2 - 1 - i_{1,2,l} (reverse indexing), and a free per-layer
+  QPSK co-phasing c_l = i_{2,l} in {0..3};
+* ranks 5-8 select L_G in {3, 4} distinct beams via the clause-5.2.2.2.3
+  combinatorial index i_{1,2}; layers pair up on the beams and each pair's
+  co-phasings are (c, c+2) -- an orthogonal (+phi, -phi) pair -- indicated by
+  a 1-bit i_{2,g} (2-bit for the unpaired layer), Table 5.2.2.2.1a-6.
+
+The Refined Type I Multi-Panel codebook (5.2.2.2.2a) lives in
+``refined_type1mp_r19``.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from math import comb
 
 import numpy as np
 
 from ..config import SUPPORTED_N1N2_R19, AntennaConfig
+from ..utils import combinatorics as cb
 from ..utils import dft
 from .base import CodebookScheme
 
@@ -62,6 +75,54 @@ class RefinedType1PMI:
     i13: int | None = None  # ranks 2-8
     i112: tuple[int, ...] = field(default_factory=tuple)  # ranks 5-8: i_{1,1,j}
     i122: tuple[int, ...] = field(default_factory=tuple)  # ranks 5-8: i_{1,2,j}
+
+
+@dataclass
+class RefinedType1ModeBPMI:
+    """codebookMode-r19 = 'modeB' report (5.2.2.2.1a).
+
+    ``i2`` holds one row per PMI frequency unit: ranks 1-4 carry the per-layer
+    QPSK co-phasing i_{2,l} (v columns, values 0-3); ranks 5-8 carry the
+    per-group fields i_{2,g} of Table 5.2.2.2.1a-6 (L_G columns, 1-bit for a
+    (c, c+2) layer pair, 2-bit for the unpaired layer).
+    """
+
+    rank: int
+    q1: int  # i_{1,1} = [q1 q2]
+    q2: int
+    i12l: tuple[int, ...] = field(default_factory=tuple)  # ranks 1-4: i_{1,2,l}
+    i12: int | None = None  # ranks 5-8: combinatorial beam-set index i_{1,2}
+    i2: np.ndarray | None = None
+
+
+#: modeB ranks 5-8: i_{2,g} fields in reporting order as (group, n_phases);
+#: n_phases = 2 encodes a (c, c+2) co-phasing pair carried by two layers on
+#: beam ``group``, n_phases = 4 a free QPSK phase for a single layer
+#: (Table 5.2.2.2.1a-6).
+_MODEB_FIELDS: dict[int, list[tuple[int, int]]] = {
+    5: [(0, 2), (1, 2), (2, 4)],
+    6: [(0, 2), (1, 2), (2, 2)],
+    7: [(0, 2), (1, 4), (2, 2), (3, 2)],
+    8: [(0, 2), (1, 2), (2, 2), (3, 2)],
+}
+
+#: modeB ranks 5-8: number of distinct beams L_G selected by i_{1,2}.
+_MODEB_LG = {5: 3, 6: 3, 7: 4, 8: 4}
+
+
+def modeb_layer_fields(rank: int) -> list[tuple[int, int, int | None]]:
+    """Per-layer (beam group g, i2 field index, phase offset) for ranks 5-8.
+
+    ``offset`` is 0/2 for the two layers of a (c, c+2) pair and None for the
+    free-phase layer (c_l = i_{2,g} directly).
+    """
+    layers: list[tuple[int, int, int | None]] = []
+    for fi, (g, nph) in enumerate(_MODEB_FIELDS[rank]):
+        if nph == 2:
+            layers.extend([(g, fi, 0), (g, fi, 2)])
+        else:
+            layers.append((g, fi, None))
+    return layers
 
 
 # Column sign patterns of Table 5.2.2.2.1a-4, as (beam_index, top_sign, phi,
@@ -105,14 +166,15 @@ _N_EXTRA = {5: 2, 6: 2, 7: 3, 8: 3}
 
 
 class RefinedType1SinglePanelCodebook(CodebookScheme):
-    """TS 38.214 5.2.2.2.1a 'typeI-SinglePanel-r19', codebookMode 'modeA'."""
-
-    name = "R19 Refined Type I single-panel (modeA)"
+    """TS 38.214 5.2.2.2.1a 'typeI-SinglePanel-r19' (codebookMode-r19
+    'modeA' or 'modeB')."""
 
     def __init__(
         self,
         antenna: AntennaConfig,
         N3: int = 1,
+        mode: str = "modeA",
+        ri_restriction: np.ndarray | None = None,
         selection_snr_db: float = 10.0,
     ) -> None:
         if (antenna.N1, antenna.N2) not in SUPPORTED_N1N2_R19:
@@ -124,8 +186,20 @@ class RefinedType1SinglePanelCodebook(CodebookScheme):
             raise ValueError("Refined Type I single-panel requires Ng=1")
         if N3 < 1:
             raise ValueError("N3 must be positive")
+        if mode not in ("modeA", "modeB"):
+            raise ValueError("codebookMode-r19 must be 'modeA' or 'modeB'")
         self.antenna = antenna
         self.N3 = N3
+        self.mode = mode
+        # typeI-SinglePanelRI-Restriction-r19: 8-bit bitmap [r0..r7].
+        if ri_restriction is None:
+            ri_restriction = np.ones(8, dtype=bool)
+        self.ri_restriction = np.asarray(ri_restriction, dtype=bool)
+        if self.ri_restriction.shape != (8,):
+            raise ValueError(
+                "typeI-SinglePanelRI-Restriction-r19 must have 8 bits [r0..r7]"
+            )
+        self.name = f"R19 Refined Type I single-panel ({mode})"
         self.selection_rho = 10 ** (selection_snr_db / 10)
 
     # -- beam list ----------------------------------------------------------
@@ -160,7 +234,9 @@ class RefinedType1SinglePanelCodebook(CodebookScheme):
             columns.append(np.concatenate([top, bot]))
         return np.stack(columns, axis=1) / math.sqrt(rank * a.P)
 
-    def precoder(self, pmi: RefinedType1PMI) -> np.ndarray:
+    def precoder(self, pmi) -> np.ndarray:
+        if self.mode == "modeB":
+            return self._precoder_modeb(pmi)
         self._validate(pmi)
         a = self.antenna
         beam_idx = self._beams(pmi)
@@ -170,13 +246,59 @@ class RefinedType1SinglePanelCodebook(CodebookScheme):
             W[0, t] = self._w_at(beams, pmi.rank, int(pmi.i2[t]))
         return W
 
+    # -- modeB --------------------------------------------------------------
+
+    def _modeb_beams(self, pmi: RefinedType1ModeBPMI) -> list[tuple[int, int]]:
+        """Selected beam grid positions: one per layer (ranks 1-4) or the L_G
+        distinct beams in i_{1,2} order (ranks 5-8)."""
+        a = self.antenna
+        if pmi.rank <= 4:
+            out = []
+            for i12l in pmi.i12l:
+                n = a.N1 * a.N2 - 1 - i12l  # n^(l) = N1*N2 - 1 - i_{1,2,l}
+                n1, n2 = n % a.N1, n // a.N1
+                out.append((a.O1 * n1 + pmi.q1, a.O2 * n2 + pmi.q2))
+            return out
+        n1, n2 = cb.decode_beam_combination(
+            pmi.i12, a.N1, a.N2, _MODEB_LG[pmi.rank]
+        )
+        return [(a.O1 * x1 + pmi.q1, a.O2 * x2 + pmi.q2) for x1, x2 in zip(n1, n2)]
+
+    def _modeb_layer_cs(self, pmi: RefinedType1ModeBPMI, t: int) -> list[tuple[int, int]]:
+        """(beam list index, c_l) per layer at frequency unit t."""
+        i2 = np.asarray(pmi.i2)
+        if pmi.rank <= 4:
+            return [(li, int(i2[t, li])) for li in range(pmi.rank)]
+        out = []
+        for g, fi, offset in modeb_layer_fields(pmi.rank):
+            v = int(i2[t, fi])
+            out.append((g, v if offset is None else v + offset))
+        return out
+
+    def _precoder_modeb(self, pmi: RefinedType1ModeBPMI) -> np.ndarray:
+        self._validate_modeb(pmi)
+        a = self.antenna
+        beams = [dft.spatial_beam(a, l, m) for l, m in self._modeb_beams(pmi)]
+        W = np.empty((1, self.N3, a.P, pmi.rank), dtype=complex)
+        scale = math.sqrt(pmi.rank * a.P)
+        for t in range(self.N3):
+            for li, (bi, c) in enumerate(self._modeb_layer_cs(pmi, t)):
+                phi = np.exp(1j * np.pi * c / 2)
+                W[0, t, :, li] = np.concatenate([beams[bi], phi * beams[bi]]) / scale
+        return W
+
     # -- UE side ------------------------------------------------------------
 
-    def select(self, H: np.ndarray, rank: int = 1) -> RefinedType1PMI:
+    def select(self, H: np.ndarray, rank: int = 1):
         from ._spatial import aligned_eigen_targets
 
         if not 1 <= rank <= min(8, self.antenna.P):
             raise ValueError(f"Refined Type I rank {rank} unsupported")
+        if not self.ri_restriction[rank - 1]:
+            raise ValueError(
+                f"rank {rank} prohibited by typeI-SinglePanelRI-Restriction-r19 "
+                f"(r{rank - 1}=0)"
+            )
         H = np.asarray(H)
         if H.ndim != 4:
             raise ValueError("H must be [slot, t, rx, port]")
@@ -185,6 +307,8 @@ class RefinedType1SinglePanelCodebook(CodebookScheme):
             raise ValueError(f"channel has {Ht.shape[0]} frequency units, expected {self.N3}")
         if Ht.shape[-1] != self.antenna.P:
             raise ValueError(f"channel has {Ht.shape[-1]} ports, expected {self.antenna.P}")
+        if self.mode == "modeB":
+            return self._select_modeb(Ht, rank)
         a = self.antenna
         targets = aligned_eigen_targets(Ht, rank)  # (N3, P, rank)
         energy = self._beam_energy(targets)  # (G1, G2)
@@ -230,6 +354,132 @@ class RefinedType1SinglePanelCodebook(CodebookScheme):
         pa = np.einsum("xyp,npv->xynv", grid.conj(), targets[:, :half, :])
         pb = np.einsum("xyp,npv->xynv", grid.conj(), targets[:, half:, :])
         return (np.abs(pa) ** 2 + np.abs(pb) ** 2).sum(axis=(2, 3))
+
+    # -- modeB UE side -------------------------------------------------------
+
+    def _select_modeb(self, Ht: np.ndarray, rank: int) -> RefinedType1ModeBPMI:
+        from ._spatial import aligned_eigen_targets
+
+        a = self.antenna
+        half = a.P // 2
+        targets = aligned_eigen_targets(Ht, rank)  # (N3, P, rank)
+        grid = dft.spatial_grid(a)  # (G1, G2, half)
+        pa = np.einsum("xyp,npv->xynv", grid.conj(), targets[:, :half, :])
+        pb = np.einsum("xyp,npv->xynv", grid.conj(), targets[:, half:, :])
+        # per-layer energy on every grid beam, (G1, G2, v)
+        energy_l = (np.abs(pa) ** 2 + np.abs(pb) ** 2).sum(axis=2)
+
+        n_beams = a.N1 * a.N2
+        best = (-1.0, None)
+        for q1 in range(a.O1):
+            for q2 in range(a.O2):
+                # energies of the orthogonal group's beams, (N1*N2, v) with
+                # row n = N1*n2 + n1
+                rows = np.array(
+                    [
+                        energy_l[a.O1 * (n % a.N1) + q1, a.O2 * (n // a.N1) + q2]
+                        for n in range(n_beams)
+                    ]
+                )
+                if rank <= 4:
+                    score = float(rows.max(axis=0).sum())  # per-layer free choice
+                    picks = rows.argmax(axis=0)  # beam n per layer
+                else:
+                    L_G = _MODEB_LG[rank]
+                    tot = rows.sum(axis=1)
+                    top = np.sort(np.argsort(tot)[::-1][:L_G])
+                    score = float(tot[top].sum())
+                    picks = top
+                if score > best[0]:
+                    best = (score, (q1, q2, picks))
+        q1, q2, picks = best[1]
+
+        pmi = RefinedType1ModeBPMI(rank, q1, q2)
+        if rank <= 4:
+            pmi.i12l = tuple(int(n_beams - 1 - n) for n in picks)
+            beam_of_layer = list(range(rank))
+        else:
+            n1 = [int(n % a.N1) for n in picks]
+            n2 = [int(n // a.N1) for n in picks]
+            pmi.i12 = cb.encode_beam_combination(n1, n2, a.N1, a.N2)
+            beam_of_layer = None  # derived from modeb_layer_fields below
+
+        beams = [dft.spatial_beam(a, l, m) for l, m in self._modeb_beams(pmi)]
+        # matched-filter projections per (t, beam, layer): w^H u with
+        # w = [b; phi b] gives z0 + conj(phi) z1
+        z0 = np.einsum("bp,tpv->tbv", np.conj(beams), targets[:, :half, :])
+        z1 = np.einsum("bp,tpv->tbv", np.conj(beams), targets[:, half:, :])
+        phis = np.exp(1j * np.pi * np.arange(4) / 2)
+
+        if rank <= 4:
+            pmi.i2 = np.zeros((self.N3, rank), dtype=int)
+            for t in range(self.N3):
+                used: set[tuple[int, int]] = set()
+                for li in range(rank):
+                    bi = beam_of_layer[li]
+                    metric = np.abs(z0[t, bi, li] + np.conj(phis) * z1[t, bi, li])
+                    order = np.argsort(metric)[::-1]
+                    beam_key = pmi.i12l[li]
+                    c = next(
+                        (int(x) for x in order if (beam_key, int(x)) not in used),
+                        int(order[0]),
+                    )
+                    used.add((beam_key, c))
+                    pmi.i2[t, li] = c
+            return pmi
+
+        fields = _MODEB_FIELDS[rank]
+        pmi.i2 = np.zeros((self.N3, len(fields)), dtype=int)
+        for t in range(self.N3):
+            li = 0
+            for fi, (g, nph) in enumerate(fields):
+                if nph == 4:  # one free-phase layer on beam g
+                    metric = np.abs(z0[t, g, li] + np.conj(phis) * z1[t, g, li])
+                    pmi.i2[t, fi] = int(np.argmax(metric))
+                    li += 1
+                else:  # layer pair (c, c+2) on beam g
+                    m = [
+                        float(
+                            np.abs(z0[t, g, li] + np.conj(phis[i]) * z1[t, g, li])
+                            + np.abs(
+                                z0[t, g, li + 1] + np.conj(phis[i + 2]) * z1[t, g, li + 1]
+                            )
+                        )
+                        for i in (0, 1)
+                    ]
+                    pmi.i2[t, fi] = int(np.argmax(m))
+                    li += 2
+        return pmi
+
+    def _validate_modeb(self, pmi: RefinedType1ModeBPMI) -> None:
+        a = self.antenna
+        n_beams = a.N1 * a.N2
+        if not 1 <= pmi.rank <= 8:
+            raise ValueError(f"rank {pmi.rank} not in 1..8")
+        if not (0 <= pmi.q1 < a.O1 and 0 <= pmi.q2 < a.O2):
+            raise ValueError("i11 = [q1 q2] out of range")
+        i2 = np.asarray(pmi.i2) if pmi.i2 is not None else None
+        if pmi.rank <= 4:
+            if len(pmi.i12l) != pmi.rank:
+                raise ValueError("i12l needs one entry per layer for ranks 1-4")
+            if any(not 0 <= x < n_beams for x in pmi.i12l):
+                raise ValueError(f"i_{{1,2,l}} must be in [0, {n_beams})")
+            if i2 is None or i2.shape != (self.N3, pmi.rank):
+                raise ValueError(f"i2 must be ({self.N3}, {pmi.rank})")
+            if i2.min() < 0 or i2.max() > 3:
+                raise ValueError("i_{2,l} values must be in 0..3")
+            return
+        L_G = _MODEB_LG[pmi.rank]
+        hi = comb(n_beams, L_G)
+        if pmi.i12 is None or not 0 <= pmi.i12 < hi:
+            raise ValueError(f"i12 must be in [0, C({n_beams},{L_G}))")
+        fields = _MODEB_FIELDS[pmi.rank]
+        if i2 is None or i2.shape != (self.N3, len(fields)):
+            raise ValueError(f"i2 must be ({self.N3}, {len(fields)})")
+        for fi, (_, nph) in enumerate(fields):
+            col = i2[:, fi]
+            if col.min() < 0 or col.max() >= nph:
+                raise ValueError(f"i_{{2,{fi + 1}}} values must be in [0, {nph})")
 
     def _select_highrank(self, energy, i11, i12, rank):
         """Greedy companion-beam selection for ranks 5-8.
@@ -303,8 +553,21 @@ class RefinedType1SinglePanelCodebook(CodebookScheme):
 
     # -- overhead -----------------------------------------------------------
 
-    def overhead_bits(self, pmi: RefinedType1PMI) -> dict[str, int]:
+    def overhead_bits(self, pmi) -> dict[str, int]:
         a = self.antenna
+        if self.mode == "modeB":
+            n_beams = a.N1 * a.N2
+            bits = {"i11": math.ceil(math.log2(a.O1)) + math.ceil(math.log2(a.O2))}
+            if pmi.rank <= 4:
+                bits["i12"] = pmi.rank * math.ceil(math.log2(n_beams))
+                bits["i2"] = self.N3 * 2 * pmi.rank
+            else:
+                L_G = _MODEB_LG[pmi.rank]
+                bits["i12"] = math.ceil(math.log2(comb(n_beams, L_G)))
+                bits["i2"] = self.N3 * sum(
+                    round(math.log2(nph)) for _, nph in _MODEB_FIELDS[pmi.rank]
+                )
+            return bits
         G1, G2 = a.n_beams
         bits = {
             "i11": math.ceil(math.log2(G1)),

@@ -461,7 +461,12 @@ def test_r16_K0_uses_M1_not_Mv(N3, idx):
     NOT the per-rank M_v (j30 line 8005: ``Let K0 = ceil(beta 2L M_1)``)."""
     L, p12, _, beta = SPEC_TABLE_5_2_2_2_5_1[idx]
     M1 = m_v(p12, N3, 1)
-    cbk = R16Type2Codebook(AntennaConfig.standard(4, 2), N3=N3, param_combination=idx)
+    cbk = R16Type2Codebook(
+        AntennaConfig.standard(4, 4),  # P = 32: combos 7/8 are configurable
+        N3=N3,
+        param_combination=idx,
+        ri_restriction=[1, 1, 0, 0] if idx in (7, 8) else None,
+    )
     assert cbk.K0 == int(np.ceil(beta * 2 * L * M1))
 
 
@@ -558,6 +563,112 @@ def test_r18_K0_scales_with_Q(idx, N4, Q):
     K0 = ceil(2 * beta * L * M1 * Q)."""
     L, p12, _, beta = SPEC_TABLE_5_2_2_2_10_1[idx]
     M1 = m_v(p12, 18, 1)
-    cbk = R18Type2Codebook(AntennaConfig.standard(4, 2), N3=18, N4=N4, param_combination=idx)
+    cbk = R18Type2Codebook(
+        AntennaConfig.standard(4, 4),  # P = 32: combos 8/9 are configurable
+        N3=18,
+        N4=N4,
+        param_combination=idx,
+        ri_restriction=[1, 1, 0, 0] if idx in (8, 9) else None,
+    )
     assert cbk.Q == Q
     assert cbk.K0 == int(np.ceil(2 * beta * L * M1 * Q))
+
+
+# ---------------------------------------------------------------------------
+# UCI bitwidths -- TS 38.212 v19.4.0 Tables 6.3.2.1.2-1A / -1C / -2B
+# (specs/38.212-v19.4.0.md; readable text, no OCR).
+# ---------------------------------------------------------------------------
+
+
+def _rank1_drop(cbk, n_slots=1):
+    from nr_csi.channel import RandomRayChannel
+
+    chan = RandomRayChannel(cbk.antenna, N3=cbk.N3, n_rx=2, n_paths=4, max_delay=3.0)
+    return chan.generate(n_slots=n_slots, rng=np.random.default_rng(3))
+
+
+class TestUCISCIWidths38212:
+    """Strongest-coefficient-indicator widths: ceil(log2(K^NZ)) at rank 1,
+    ceil(log2(2L)) / ceil(log2(2LQ)) / ceil(log2(K1*M)) per layer otherwise."""
+
+    def test_r16_rank1_sci_is_knz_based(self):
+        """TS 38.212 Table 6.3.2.1.2-1A, Rank=1 row."""
+        from nr_csi.codebooks.serialize import pack
+
+        cbk = R16Type2Codebook(AntennaConfig.standard(4, 2), N3=12, param_combination=6)
+        pmi = cbk.select(_rank1_drop(cbk), rank=1)
+        k_nz = int(pmi.i17.sum())
+        bits = cbk.overhead_bits(pmi)
+        assert bits["i18"] == int(np.ceil(np.log2(k_nz)))
+        assert len(pack(cbk, pmi)) == sum(bits.values())
+
+    def test_r16_rank2_sci_is_2l_based(self):
+        """TS 38.212 Table 6.3.2.1.2-1A, Rank=2 row."""
+        cbk = R16Type2Codebook(AntennaConfig.standard(4, 2), N3=12, param_combination=6)
+        pmi = cbk.select(_rank1_drop(cbk), rank=2)
+        assert cbk.overhead_bits(pmi)["i18"] == 2 * int(np.ceil(np.log2(2 * cbk.L)))
+
+    def test_r18_rank1_sci_is_knz_based(self):
+        """TS 38.212 Table 6.3.2.1.2-1C, Rank=1 row."""
+        from nr_csi.codebooks.serialize import pack
+
+        cbk = R18Type2Codebook(AntennaConfig.standard(4, 2), N3=12, N4=4, param_combination=3)
+        pmi = cbk.select(_rank1_drop(cbk, n_slots=4), rank=1)
+        k_nz = int(pmi.i17.sum())
+        bits = cbk.overhead_bits(pmi)
+        assert bits["i18"] == int(np.ceil(np.log2(k_nz)))
+        assert len(pack(cbk, pmi)) == sum(bits.values())
+
+    def test_r17_sci_is_k1m_based_all_ranks(self):
+        """TS 38.212 Table 6.3.2.1.2-2B: ceil(log2(K1*M)) for every rank."""
+        cbk = R17Type2Codebook(AntennaConfig.standard(4, 2), N3=12, param_combination=7)
+        for rank in (1, 2):
+            pmi = cbk.select(_rank1_drop(cbk), rank=rank)
+            expect = rank * int(np.ceil(np.log2(cbk.K1 * cbk.M)))
+            assert cbk.overhead_bits(pmi)["i18"] == expect
+
+
+class TestR17BitmapOmission:
+    """Clause 5.2.2.2.7: i_{1,7,l} is not reported when v <= 2 and
+    K^NZ = K1*M*v (all coefficients nonzero, reachable only at beta = 1)."""
+
+    def _full_bitmap_pmi(self, cbk, rank=1):
+        from nr_csi.codebooks.fetype2_r17 import R17Type2PMI
+
+        rng = np.random.default_rng(5)
+        i17 = np.ones((rank, cbk.M, cbk.K1), dtype=bool)
+        k1 = np.ones((rank, 2), dtype=int)
+        k2 = rng.integers(0, 8, size=(rank, cbk.M, cbk.K1))
+        c = rng.integers(0, 16, size=(rank, cbk.M, cbk.K1))
+        i18 = []
+        for li in range(rank):
+            i_star, f_star = 3, 0
+            i18.append(cbk.K1 * f_star + i_star)
+            k1[li, i_star // cbk.L] = 15
+            k1[li, 1 - i_star // cbk.L] = 9
+            k2[li, f_star, i_star] = 7
+            c[li, f_star, i_star] = 0
+        return R17Type2PMI(rank=rank, i12=None, i16=None, i17=i17,
+                           i18=i18, k1=k1, k2=k2, c=c)
+
+    @pytest.mark.parametrize("rank", [1, 2])
+    def test_full_bitmap_not_charged_and_roundtrips(self, rank):
+        from nr_csi.codebooks.serialize import pack, unpack
+
+        # paramCombination 4: M = 1, alpha = 1, beta = 1 -> K0 = K1*M
+        cbk = R17Type2Codebook(AntennaConfig.standard(4, 2), N3=8, param_combination=4)
+        pmi = self._full_bitmap_pmi(cbk, rank)
+        bits = cbk.overhead_bits(pmi)
+        assert "i17" not in bits
+        stream = pack(cbk, pmi)
+        assert len(stream) == sum(bits.values())
+        back = unpack(cbk, stream, rank)
+        assert np.array_equal(back.i17, pmi.i17)
+        assert np.array_equal(back.k2, pmi.k2) and np.array_equal(back.c, pmi.c)
+        assert back.i18 == pmi.i18
+
+    def test_partial_bitmap_still_charged(self):
+        cbk = R17Type2Codebook(AntennaConfig.standard(4, 2), N3=8, param_combination=4)
+        pmi = self._full_bitmap_pmi(cbk, rank=1)
+        pmi.i17[0, 0, 5] = False  # one zero coefficient -> bitmap reported
+        assert cbk.overhead_bits(pmi)["i17"] == cbk.K1 * cbk.M

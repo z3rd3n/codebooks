@@ -83,8 +83,9 @@ class RefinedEType2Codebook(R16Type2Codebook):
                 "paramCombination-r19 7/8 require R=1 and ranks 3,4 disallowed "
                 "(typeII-RI-Restriction-r19)"
             )
-        super().__init__(antenna, N3, param_combination=param_combination, R=R)
-        self.ri_restriction = r
+        super().__init__(
+            antenna, N3, param_combination=param_combination, R=R, ri_restriction=r
+        )
         self.name = "R19 Refined eType II"
 
     def select(self, H: np.ndarray, rank: int = 1):
@@ -116,8 +117,13 @@ class RefinedFeType2PortSelectionCodebook(R17Type2Codebook):
                 "paramCombination-r19=8 is not supported for the refined feType II "
                 "port-selection codebook (5.2.2.2.9a)"
             )
-        super().__init__(antenna, N3, param_combination=param_combination, N_window=N_window)
-        self.ri_restriction = _as_ri_restriction(ri_restriction)
+        super().__init__(
+            antenna,
+            N3,
+            param_combination=param_combination,
+            N_window=N_window,
+            ri_restriction=_as_ri_restriction(ri_restriction),
+        )
         self.name = "R19 Refined feType II PS"
 
     def select(self, H: np.ndarray, rank: int = 1):

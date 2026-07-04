@@ -106,9 +106,10 @@ def crosscheck() -> list[str]:
         f"**{formula}** {ok} codebook `total_overhead_bits` = **{code}** "
         f"(R15 reports all 2L coeffs every subband, so formula and realized "
         f"counts coincide).",
-        f"- R16/R18 formula bits use the spec worst-case K_nz; the codebook "
-        f"reports only the realized K_nz nonzeros, so its figure is lower "
-        f"(it is the per-drop cost, not the formula upper bound).",
+        f"- R16/R18 formula bits are evaluated at the K^NZ = 20 operating "
+        f"point (the f2 convention), not the spec worst case (rank-1 maximum "
+        f"is K0); the codebook reports the realized K_nz of a drop, which can "
+        f"land above or below this operating point.",
     ]
 
 

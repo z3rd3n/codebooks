@@ -59,6 +59,18 @@ SUPPORTED_N1N2_R19: dict[tuple[int, int], tuple[int, int]] = {
     (8, 8): (4, 4),   # 128 ports
 }
 
+# (Ng, N1, N2) -> (O1, O2) for the Release-19 refined Type I multi-panel
+# codebook, TS 38.214 Table 5.2.2.2.2a-1; O1 = O2 = 4 throughout.
+SUPPORTED_NG_N1N2_R19: dict[tuple[int, int, int], tuple[int, int]] = {
+    (2, 4, 3): (4, 4),  # 48 ports
+    (2, 6, 2): (4, 4),  # 48 ports
+    (2, 4, 4): (4, 4),  # 64 ports
+    (2, 8, 2): (4, 4),  # 64 ports
+    (4, 4, 2): (4, 4),  # 64 ports
+    (4, 4, 4): (4, 4),  # 128 ports
+    (4, 8, 2): (4, 4),  # 128 ports
+}
+
 
 @dataclass(frozen=True)
 class AntennaConfig:
@@ -89,7 +101,9 @@ class AntennaConfig:
                 expected = {**SUPPORTED_N1N2, **SUPPORTED_N1N2_R19}.get((self.N1, self.N2))
                 key = f"(N1,N2)=({self.N1},{self.N2})"
             else:
-                expected = SUPPORTED_NG_N1N2.get((self.Ng, self.N1, self.N2))
+                expected = {**SUPPORTED_NG_N1N2, **SUPPORTED_NG_N1N2_R19}.get(
+                    (self.Ng, self.N1, self.N2)
+                )
                 key = f"(Ng,N1,N2)=({self.Ng},{self.N1},{self.N2})"
             if expected is None:
                 raise ValueError(
@@ -104,7 +118,11 @@ class AntennaConfig:
 
     @classmethod
     def standard(cls, N1: int, N2: int, Ng: int = 1) -> "AntennaConfig":
-        table = {**SUPPORTED_N1N2, **SUPPORTED_N1N2_R19} if Ng == 1 else SUPPORTED_NG_N1N2
+        table = (
+            {**SUPPORTED_N1N2, **SUPPORTED_N1N2_R19}
+            if Ng == 1
+            else {**SUPPORTED_NG_N1N2, **SUPPORTED_NG_N1N2_R19}
+        )
         key = (N1, N2) if Ng == 1 else (Ng, N1, N2)
         O1, O2 = table[key]
         return cls(N1=N1, N2=N2, O1=O1, O2=O2, Ng=Ng)

@@ -40,7 +40,7 @@ Type II R18  (eType II Doppler / predicted PMI)
 Release 19  (refined Type I & Type II)
 
    ⌐ branch off R16 / R17: + multi-TRP (N_TRP) coherent joint transmission
-Type II R18 CJT  (eType II / feType II PS for CJT)   ← standardized, not implemented
+Type II R18 CJT  (eType II / feType II PS for CJT)
 ```
 
 ## Chapters
@@ -55,7 +55,7 @@ Type II R18 CJT  (eType II / feType II PS for CJT)   ← standardized, not imple
 | 5 | [05-fetype2-r17.md](05-fetype2-r17.md) | R17 **Further-enhanced Type II PS** (+ R18 predicted PS) | §5.2.2.2.7, §5.2.2.2.11 | 1–4 |
 | 6 | [06-etype2-doppler-r18.md](06-etype2-doppler-r18.md) | R18 **eType II Doppler** (predicted PMI) | §5.2.2.2.10 | 1–4 |
 | 7 | [07-refined-r19.md](07-refined-r19.md) | Release-19 **refined** Type I & Type II | §5.2.2.2.1a/2a/5a/9a/11a | 1–8 |
-| 8 | [08-cjt.md](08-cjt.md) | R18 **CJT** eType II & feType II PS (multi-TRP) — *standardized, not implemented* | §5.2.2.2.8/9 | 1–4 |
+| 8 | [08-cjt.md](08-cjt.md) | R18 **CJT** eType II & feType II PS (multi-TRP) | §5.2.2.2.8/9 | 1–4 |
 
 ## Marker convention
 
@@ -66,9 +66,11 @@ Because each chapter documents the whole standard, not just the code, anything
   > 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** …
 * a single missing option/value is tagged inline — **[not implemented]**.
 
-Everything unmarked is implemented. Chapter 8 (CJT) is *entirely* not implemented;
-the rest are implemented with isolated spec-only features flagged. Grep the docs
-for `NOT IMPLEMENTED` to enumerate the gaps between the standard and the code.
+Everything unmarked is implemented. Every codebook family — including the CJT
+pair, the 2-port Type I codebook, and all Release-19 refined classes — now has
+an implementation; the remaining flags cover isolated reporting-stack options.
+Grep the docs for `NOT IMPLEMENTED` to enumerate the gaps between the standard
+and the code.
 
 ## The one interface they all share
 

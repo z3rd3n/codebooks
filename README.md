@@ -1,4 +1,4 @@
-# nr-csi — 3GPP NR PMI Codebook Benchmark Framework (R15–R18)
+# nr-csi — 3GPP NR PMI Codebook Benchmark Framework (R15–R19)
 
 NumPy implementations of the 5G NR beamforming codebooks, built as a
 trustworthy baseline set for comparing learned (ML) CSI feedback algorithms
@@ -12,6 +12,7 @@ Tutorial on 3GPP Beamforming Codebooks"*).
 
 | Class | Codebook | Compression | Ranks |
 |---|---|---|---|
+| `TwoPortType1Codebook` | R15 Type I, 2 ports (Table 5.2.2.2.1-1) | fixed 4+2-entry codebook | 1–2 |
 | `Type1Codebook` | R15 Type I single-panel, Modes 1–2 | beam + co-phasing | 1–8 |
 | `Type1MultiPanelCodebook` | R15 Type I multi-panel, Modes 1–2 | beam + panel/polarization co-phasing | 1–4 |
 | `R15Type2Codebook` | R15 Type II (+ port-selection variant) | spatial (L beams) | 1–2 |
@@ -19,6 +20,11 @@ Tutorial on 3GPP Beamforming Codebooks"*).
 | `R17Type2Codebook` | R17 FeType II port-selection | free ports + M taps | 1–4 |
 | `R18Type2Codebook` | R18 eType II Doppler (predicted PMI) | spatial + delay + Doppler (Q shifts over N₄ intervals) | 1–4 |
 | `R18PredictedPortSelectionCodebook` | R18 FeType II PS predicted PMI (N₄=1) | free ports + M taps | 1–4 |
+| `R18CJTCodebook` | R18 eType II for CJT (multi-TRP, N_TRP ≤ 4) | per-TRP beams + common delay + O₃ inter-TRP co-phasing | 1–4 |
+| `R18CJTPortSelectionCodebook` | R18 FeType II PS for CJT | per-TRP free ports + windowed taps + O₃ co-phasing | 1–4 |
+| `RefinedType1SinglePanelCodebook` | R19 refined Type I SP (48/64/128 ports, modeA/modeB) | refined beam selection + co-phasing | 1–8 |
+| `RefinedType1MultiPanelCodebook` | R19 refined Type I MP (Ng ∈ {2,4} panels) | per-panel beams + inter-panel phases | 1–4 |
+| `RefinedEType2Codebook` / `RefinedFeType2PortSelectionCodebook` / `RefinedPredictedEType2Codebook` | R19 refined Type II family (48/64/128 ports) | as R16 / R17 / R18 | 1–4 |
 
 Each codebook implements the same interface (`nr_csi.codebooks.base.CodebookScheme`):
 
@@ -105,6 +111,14 @@ python scripts/figures/fig_02_rate_distortion.py --drops 200 --seed 1   # any on
 | `fig_10_array_scaling` | SE / gap-to-bound / SGCS / bits vs array size (P = 8…32, all families + (16,1) aspect contrast) |
 | `fig_11_frequency_granularity` | fidelity and cost vs N₃: per-subband (R15) vs M_v-tap (R16) reporting |
 | `fig_12_summary` | normalized radar scorecard + raw-numbers table (`results/fig_12_summary_table.md`) |
+| `fig_13_new_codebooks` | the spec-completion codebooks: 2-port Type I vs bound, R19 refined Type I modeA/modeB/multi-panel, CJT mode1 vs mode2 vs inter-TRP delay |
+
+A presentation-grade comparison set (six annotated figures + narrative
+README) rendered from the same JSON data lives in `results/comparison/`
+(`python scripts/figures/comparison_gallery.py` re-renders it without
+re-running any Monte Carlo). Spec conformance status: equation-level audit
+in `docs/verification_report_38214_v19.md`; unimplemented spec features in
+`docs/spec_gap_analysis.md`.
 
 Every figure has a hand-written analysis next to it
 (`results/<figure>.md`): what it shows, the mechanism behind each trend,
@@ -113,45 +127,44 @@ SGCS collapse, the R18 K₀ = ⌈2βLM₁Q⌉ static-channel budget bonus, R17's
 fidelity *rising* with P, the windowed-PS vs free-PS gap, the measurement-
 noise ranking inversion, the L = 1 overhead inversion in f2).
 
-## Web UI
+## Web UI — CSI Codebook Studio
 
-A small Streamlit app (`webapp/`) drives the gallery from a browser — no CLI
-needed. Pick a channel and its config, choose which codebook families to
-compare and which figures to generate, then inspect each PNG with the exact
-numbers behind it.
+A professional web app (`webapp/`) for exploring, understanding, and running
+every codebook from a browser — designed so someone who has never read
+TS 38.214 or written a line of Python can still learn each codebook and run it.
+It is a FastAPI backend + React/TypeScript frontend; see
+[`webapp/SPEC.md`](webapp/SPEC.md) for the full design and `webapp/README.md`
+for run instructions.
 
 ```bash
-pip install -e ".[web]"            # streamlit + pandas
-pip install -e ".[sionna]"        # optional: enables the CDL channel option
-streamlit run webapp/app.py
+pip install -e ".[web]"            # fastapi + uvicorn
+pip install -e ".[sionna]"        # optional: enables the CDL channel option in Figure Lab
+./webapp/run.sh                    # builds the UI (if needed) and serves on http://localhost:8787
 ```
 
-The **Figure gallery** tab maps the form to `NRCSI_*` environment variables
-consumed by `nr_csi.figtools.figlib`/`cdllib` (antenna geometry, `N3`, `n_rx`,
-ray richness, the family filter, and CDL model/speed/delay-spread); each
-selected figure is then run as the same `scripts/figures/(cdl_)fig_*.py`
-subprocess, so the web view matches `make_all_figures.py` exactly. Codebook
-selection filters which families are overlaid (`NRCSI_FAMILIES`); a few figures
-show a fixed built-in set — *Overhead scaling* (analytic), *Rank adaptation*,
-*Port selection* — and *Array scaling* / *Frequency granularity* sweep the
-antenna / `N3` themselves, so those inputs don't apply to them.
+The app has six areas:
 
-The **Compare channels** tab overlays the channel-domain diagnostics of several
-models (CDL A–E at any model/speed/delay-spread, and the synthetic ray channel)
-on one grid: power-delay profile, frequency correlation, temporal (Doppler)
-correlation, and the transmit-side spatial covariance spectrum
-(`scripts/figures/channel_compare.py`, metrics in `nr_csi.channel.diagnostics`).
-It also prints a validation table — measured vs configured RMS delay spread,
-coherence bandwidth/time, and the dominant spatial eigenvalue λ₁ (high ⇒
-line-of-sight). These are codebook-independent checks on the channel itself:
-delay spread must scale with its setting (down to the ~130 ns tap resolution of
-the default 256-pt / 30 kHz grid), temporal coherence must shorten with UE
-speed, and CDL-D/E (LoS) must concentrate λ₁ more than CDL-A/B/C (NLoS). The
-diagnostics are unit-tested against the synthetic channel
-(`tests/core/test_channel_diagnostics.py`, exact closed-form values) and the CDL
-trends are asserted in `tests/integration/test_sionna_integration.py`
-(`-m sionna`), complementing the existing spatial-wiring tests (port
-permutation, LoS array gain).
+* **Overview / Library** — a plain-language tour of what CSI feedback is and a
+  release-ordered catalog (R15 → R19) of every implemented codebook.
+* **Codebook pages** — each family gets an *Understand* tab (analogy-first
+  explanation, what the UE reports, a key-formula card, strengths/limitations),
+  a *Run* tab (the playground scoped to that codebook), and a *Deep dive* tab
+  (the full spec-faithful chapter from [`docs/codebooks/`](docs/codebooks/)
+  rendered with math).
+* **Playground** — pick a codebook, antenna, and channel, and run it: metric
+  cards (SGCS, feedback bits, SE@10 dB vs the eigen bound), an SE-vs-SNR chart,
+  the overhead breakdown, channel/precoder heatmaps, the selected DFT beams, a
+  human-readable PMI report, and a copy-pasteable Python equivalent.
+* **Compare** — put up to six codebooks on the same channel and see the
+  rate–distortion trade-off (feedback bits vs accuracy) side by side.
+* **Figure Lab** — reproduce the benchmark figures (`scripts/figures/…`) on a
+  channel of your choosing. The backend runs the exact same figure scripts as
+  `make_all_figures.py` as subprocesses, streaming each PNG back with its
+  "how to read it" note; the CDL channel option requires the `sionna` extra.
+
+The playground and compare views run the real codebooks through the same
+`nr_csi.eval.harness.evaluate` used everywhere else, so the numbers match the
+library exactly.
 
 ## Comparing your ML CSI algorithm
 
@@ -236,9 +249,14 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
    coefficient payload) is not amortized by a single beam — while the
    figure's bars show R16 below R15 everywhere. Locked in
    `tests/eval/test_overhead.py::TestF2Claims::test_l1_inversion_r16_exceeds_r15`.
+   Caveat: the inversion exists only under the paper's fixed K^NZ = 20,
+   which is spec-infeasible at L = 1 (TS 38.214 caps K^NZ ≤ 2K₀ = 10
+   there); with any feasible budget R16 stays below R15 (≤ 464 vs 488
+   bits), as fig_04's spec-consistent L-panel (K^NZ = K₀(L)) shows.
 5. **R16 PS parameter table** (TS 38.214 Table 5.2.2.2.6-1) is referenced but
    not transcribed in the paper; the regular `paramCombination-r16` table is
-   reused for the PS variant here.
+   reused for the PS variant here — since verified: the v19.4.0 spec text of
+   Table 5.2.2.2.6-1 equals the regular table's rows 1–6 exactly.
 6. The paper omits the Type I rank 3–8 and multi-panel matrix tables. These
    implementations are transcribed directly from TS 38.214 §5.2.2.2.1/2
    and pinned by independent closed-form tests.
@@ -282,8 +300,10 @@ spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
 | 38.901 CDL channels (Sionna), port mapping | `channel.sionna_adapter` | `test_sionna_integration.py` (`-m sionna`) |
 
 Out of scope (documented): CSI-RS resource mapping / Gold sequences (paper
-Appendices B–C, orthogonal to the codebooks), R18 CJT codebooks in
-§5.2.2.2.8/9, R19 (future phase), and exact f2 bar heights (erratum 4).
+Appendices B–C, orthogonal to the codebooks) and exact f2 bar heights
+(erratum 4). The R18 CJT pair (§5.2.2.2.8/9), the 2-port Type I codebook, and
+the full R19 refined family are implemented; see docs/spec_gap_analysis.md
+for the remaining (reporting-stack) gaps.
 
 ## Layout
 

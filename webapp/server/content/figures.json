@@ -1,0 +1,93 @@
+{
+  "fig_01_se_vs_snr": {
+    "title": "SE vs SNR",
+    "question": "As the radio link gets noisier or cleaner, how much data throughput does each codebook family actually deliver, and how close does it get to the theoretical best case?",
+    "howToRead": "Two side-by-side panels, rank 1 (one data stream) on the left and rank 2 (two streams) on the right. The x-axis is SNR (signal-to-noise ratio) in decibels; the y-axis is spectral efficiency (SE) in bits per second per Hertz. Each colored line is one codebook family's achievable throughput using its own reported precoder; the dashed line at the top of each panel is the eigen upper bound — the throughput an unquantized, perfect precoder would achieve on the same channel.",
+    "whatToLookFor": "How closely each family's line hugs the upper bound, and how that gap changes as SNR increases. Richer codebooks (larger reports) should track the bound more closely; Type I's single beam typically pulls furthest away, especially at rank 2 where its rigid column structure shows its limits.",
+    "caveats": "R18 is evaluated on a static channel here, reporting once per 4 intervals, which isolates the pure cost of also encoding an (unused) Doppler axis — its curve is not a mobility result. R17 is evaluated through a beamformed deployment model (a unitary DFT port-expansion basis), not the raw antenna-domain channel."
+  },
+  "fig_02_rate_distortion": {
+    "title": "Rate-distortion",
+    "question": "For a given feedback budget in bits, which codebook configuration gets you the most accuracy — and where is the frontier of best possible trade-offs?",
+    "howToRead": "A scatter plot with feedback bits on the x-axis and a fidelity metric on the y-axis (mean SGCS in the left-style panel, SE at 10 dB in the right-style panel). Every point is one specific configuration of one family — every codebookMode of Type I, every (L, phase resolution, subband-amplitude) combination of R15 Type II, every parameter combination of R16 and R17 — all swept on the same channel drops. A highlighted line traces the Pareto frontier: the configurations that are not beaten on both axes simultaneously by any other point.",
+    "whatToLookFor": "The shape and population of the Pareto frontier — which families contribute the cheapest points, which contribute the highest-fidelity points, and where the frontier bends (diminishing returns as you spend more bits).",
+    "caveats": "R18 (Doppler) is not included on this plane; it lives on a mobility axis compared separately in the mobility and overhead-scaling figures, since on a static channel its report is essentially R16's plus extra Doppler bits with no compensating benefit. This is exactly the rate-distortion frontier a learned CSI feedback scheme would need to beat."
+  },
+  "fig_03_overhead_breakdown": {
+    "title": "Overhead breakdown",
+    "question": "Within one PMI report, which specific fields are actually eating the bits — and how does that anatomy change from one codebook generation to the next?",
+    "howToRead": "A horizontal stacked bar per codebook family, each bar segmented by what category of PMI field it represents: spatial basis (which beams/ports), delay basis (which frequency taps, R16+), Doppler basis (which time shifts, R18 only), selection structure (bitmap and strongest-coefficient indicators), amplitudes, and phases. Hover any segment for its exact field and bit count.",
+    "whatToLookFor": "Watch the per-subband phase segment dominate R15's bar, then all but vanish from R16 onward as it gets replaced by a small, fixed-size delay-basis segment plus a bitmap — the single clearest visual proof of what delay-domain compression buys.",
+    "caveats": "These are the serialization-honest bit counts from actual reported PMIs at rank 2, N3=18 (not an analytic formula) — the same totals the project's bit-packing round-trip tests assert against. Different rank or N3 choices will shift the balance, especially the frequency-scaling segments."
+  },
+  "fig_04_overhead_scaling": {
+    "title": "Overhead scaling laws",
+    "question": "As you turn up the frequency resolution, the beam count, or the number of future time intervals a report has to cover, how fast does each family's feedback cost actually grow?",
+    "howToRead": "Three analytic (formula-based, no simulated channel) panels: feedback bits vs N3 (frequency units), vs L (beam count), and vs N4 (number of future intervals covered by a single report). Each line is a codebook family's total bit formula evaluated directly, not measured from a simulation run.",
+    "whatToLookFor": "The N3 panel is the headline: R15's line grows linearly (one phase value per subband, per beam), while R16 and R18 grow only through the much slower-growing tap-count and its logarithmic index — the mathematical signature of delay-domain compression. The N4 panel shows R15/R16 needing N4 separate reports to cover N4 intervals, against R18 covering all of them with a single report.",
+    "caveats": "This figure ignores the family/antenna/N3 controls in the playground UI since it sweeps those quantities itself and does not depend on a channel realization at all — it is pure arithmetic on the standardized bit-count formulas, so it runs almost instantly."
+  },
+  "fig_05_mobility": {
+    "title": "Mobility / CSI aging",
+    "question": "When the phone is moving and the channel keeps changing after the report is sent, how much accuracy does a codebook lose to that staleness — and how well does R18's prediction claw it back?",
+    "howToRead": "Left panel: per-future-interval SGCS of a single report on a channel with real Doppler spread. R15 and R16 simply hold their one-shot precoder across all future intervals (their line decays as the channel drifts away from what was measured); R18 with N4 in {2,4,8} instead reports a genuinely predicted precoder per interval. Right panel: the harness-level view — mean SGCS when a report is applied some number of slots late, for the standard scheme set, with a dotted R18 curve showing the extra gain from indexing the correctly predicted future interval rather than replaying an old one.",
+    "whatToLookFor": "How much faster the R15/R16 lines decay compared to R18's flatter line, and how much of that gap is recovered by the delay-aware indexing in the right panel's dotted curve — that recovered gap is the concrete benefit of prediction, not just compression.",
+    "caveats": "This uses a synthetic Doppler-spread channel (off-grid Doppler shifts up to one DFT bin over an 8-interval horizon) with genie-aided knowledge of the future channel during PMI selection — a standard upper-bound assumption, not a claim about real channel-prediction accuracy."
+  },
+  "fig_06_mu_mimo": {
+    "title": "MU-MIMO sum rate",
+    "question": "When several users share the same time-frequency resource and the base station separates them by zero-forcing on their reported directions, how much does each codebook's quantization error cost in total network throughput?",
+    "howToRead": "Two panels: sum rate vs SNR at a fixed number of users (left), and sum rate vs number of users at a fixed SNR (right). Each user reports an independent rank-1 PMI on its own channel; the base station computes a zero-forcing precoder across all reported directions. A full-CSI reference line uses the true eigenvectors instead of quantized reports, so the gap to that reference is pure feedback-quantization loss.",
+    "whatToLookFor": "How the gap to the full-CSI reference changes with user count — more users means directions are more likely to be close together, so quantization error is more likely to leak interference between users. Type I's coarse single-beam direction is the family most exposed to this effect; Type II's finer reports leak much less.",
+    "caveats": "R18 is omitted here because, per report, it costs R16 plus Doppler bits while this evaluation is single-interval (no mobility benefit to show); R17 is evaluated through its beamformed deployment model, not the raw antenna-domain channel."
+  },
+  "fig_07_rank_adaptation": {
+    "title": "Rank adaptation",
+    "question": "If the base station is free to choose how many data streams (rank) to send based on channel quality, how does that choice — and the throughput it delivers — evolve as SNR changes?",
+    "howToRead": "Left panel: SE vs SNR at each fixed rank 1-4, plus an auto-RI envelope where the rank is re-decided per drop and per SNR to maximize throughput, compared against the rank-4 eigen upper bound. Right panel: the actual distribution of ranks the auto-RI logic picks at each SNR.",
+    "whatToLookFor": "The classic beamforming-gain-versus-multiplexing trade-off: at low SNR the auto-RI envelope should favor rank 1 (concentrate all power on the best direction), and at high SNR it should favor higher ranks (split power across several good-enough directions) — watch the right panel's rank distribution shift as SNR climbs.",
+    "caveats": "This figure ignores the family selector in the playground UI — it always compares Type I against R16 eType II specifically, on a richer 4-receive-antenna, 6-path channel than the default benchmark, to give rank adaptation more room to matter."
+  },
+  "fig_08_channel_sensitivity": {
+    "title": "Channel sensitivity",
+    "question": "How much does each codebook's accuracy degrade as the channel gets more complicated (more multipath) or as the channel measurement itself gets noisier?",
+    "howToRead": "Left panel: mean SGCS vs the number of multipath rays in the channel. Right panel: mean SGCS vs measurement SNR (noise added to what the phone sees when estimating the channel, while accuracy is still scored against the true channel).",
+    "whatToLookFor": "In the left panel, sparse channels (few rays) are Type II's design sweet spot — a handful of beams and coefficients fit a few dominant directions well; as ray count grows, every codebook's fixed coefficient budget saturates and accuracy degrades, at different rates. In the right panel, watch for R18's apparent extra noise robustness — it comes from averaging over its N4=4 observation slots, not from anything intrinsic to Doppler compression; the dashed comparison curve gives R16 the same 4-slot observation window for a fair, apples-to-apples check.",
+    "caveats": "Evaluated at rank 1 with the standard scheme set; scoring always uses the true (noiseless) channel even when the measurement itself was corrupted, isolating estimation-noise sensitivity from the fidelity metric itself."
+  },
+  "fig_09_port_selection": {
+    "title": "Port selection",
+    "question": "Regular (DFT-beam-searching) codebooks and port-selection codebooks are built for different deployments — how much does using the wrong one for the wrong channel domain actually cost?",
+    "howToRead": "Grouped bars across three views of the same underlying channel drops: the raw antenna domain (regular codebooks' natural home), a beamformed domain (channel passed through a unitary per-polarization port-expansion basis, modeling a gNB that has already beamformed its CSI-RS — port-selection codebooks' natural home), and a tuned version of that beamformed domain where ports are re-sorted by per-drop energy. Bars are annotated with each configuration's feedback bit cost.",
+    "whatToLookFor": "Regular codebooks should win clearly in the antenna domain and lose in the beam domain; port-selection codebooks should show the opposite pattern. Watch especially how R15/R16's port-selection variant (which assumes a *consecutive* window of strong ports) struggles when energy lands on scattered, non-adjacent ports, and how the tuned/re-sorted view or R17's genuinely free port selection recovers from that.",
+    "caveats": "This figure ignores the family selector — it always evaluates the full applicability-boundary comparison across every regular/port-selection pair, since the whole point is to contrast them side by side."
+  },
+  "fig_10_array_scaling": {
+    "title": "Antenna array scaling",
+    "question": "As the base station's antenna array grows from 8 up to 32 ports, how does each family's throughput, accuracy, and feedback cost actually scale?",
+    "howToRead": "Four panels sweeping the array itself across several supported (N1,N2) geometries (plus one extra aspect-ratio comparison at fixed port count): SE at 10 dB vs port count with the eigen bound; the SE gap to that bound vs port count; mean SGCS vs port count; and feedback bits vs port count.",
+    "whatToLookFor": "The gap-to-bound panel is the headline: as the array grows, a single Type I beam becomes a relatively worse fit to the finer beam grid, so its gap to the bound widens, while multi-beam Type II families track the bound much more closely. The bits panel shows overhead staying nearly flat with array size for the Type II families — since beam/tap/coefficient counts are set by configuration parameters, not port count.",
+    "caveats": "This figure sweeps the antenna geometry itself, so it ignores the antenna control in the playground UI. Type II families are matched at L=4 beams; R17 uses its beamformed deployment model with alpha=1/2 so its port budget scales with the array; R18 uses N4=4 on static drops."
+  },
+  "fig_11_frequency_granularity": {
+    "title": "Frequency granularity",
+    "question": "As the frequency report is sliced more finely (more PMI frequency units, N3), how much better does accuracy get, and at what bit cost?",
+    "howToRead": "Two panels sweeping N3 from 4 to 32 while holding the underlying channel's physical frequency selectivity fixed (so only the reporting granularity changes, not the channel itself): mean SGCS vs N3, and measured feedback bits vs N3 (log scale).",
+    "whatToLookFor": "R15's per-subband reporting holds fidelity steady but its bit count grows linearly with N3; R16's delay-tap count grows only as a fraction of N3, so its bits grow much more slowly (near-logarithmically) while tracking the same sparse delay structure. Type I's single wideband beam plus per-subband phase sits as a low fidelity floor throughout.",
+    "caveats": "This figure sweeps N3 itself, so it ignores the N3 control in the playground UI. At N3=24 and 32 the R16 tap indication switches to its two-level (window-plus-offset) encoding path, which is why its bit growth is not perfectly smooth."
+  },
+  "fig_12_summary": {
+    "title": "Summary scorecard",
+    "question": "If you had to describe each codebook family's whole personality in one picture, what does its shape of trade-offs look like across every axis that matters?",
+    "howToRead": "A radar (spider) chart with five axes, each normalized so the best-performing family scores 1: SE at 10 dB at rank 1, SE at 10 dB at rank 2, SGCS at rank 1, compactness (cheapest report divided by this family's own report size — higher means cheaper), and mobility SGCS (mean accuracy on future intervals 1-3 of a single report under Doppler drift). The underlying raw numbers are also available as a data table.",
+    "whatToLookFor": "The overall shape each family traces — a family that is compact but has a small polygon area is trading accuracy for cost; a family with a large area but a small compactness spike is trading cost for accuracy. No family should dominate on every axis simultaneously — that tension is the entire subject of this catalog.",
+    "caveats": "Every axis is min-max normalized across just the families shown, so scores are relative to this comparison set, not absolute fractions of some universal maximum; adding or removing a family from the comparison would shift every other family's normalized score."
+  },
+  "fig_13_new_codebooks": {
+    "title": "Spec-completion codebooks",
+    "question": "How do the less commonly discussed but fully standardized codebooks — the 2-port table, the Release-19 refined Type I variants, and R18's coherent joint transmission — actually behave?",
+    "howToRead": "Four panels: (a) the 2-port Type I codebook's SE vs SNR at ranks 1-2 against the eigen bound, showing the quantization gap of a codebook with literally only six precoders total; (b) Release-19 refined Type I single-panel on a 48-port array, SE at 10 dB vs rank 1-8, comparing codebookMode modeA against modeB; (c) R18 CJT with 2 cooperating transmission points, mean SGCS vs the inter-TRP delay offset, comparing codebookMode mode1 (which reports an explicit inter-TRP phase ramp) against mode2 (which does not); (d) Release-19 refined Type I multi-panel vs single-panel at the same 48-port budget, mean SGCS vs rank on panel-coherent channels.",
+    "whatToLookFor": "In panel (a), how much throughput the tiny fixed table leaves on the table even at rank 1. In panel (c), watch mode1's curve stay flat as the inter-TRP delay offset grows (because it explicitly reports and compensates that offset) while mode2's curve collapses once the offset drifts outside the shared delay-tap window (because it has no mechanism to correct for it).",
+    "caveats": "This figure ignores the family/antenna/N3 controls in the playground UI — it is a fixed showcase of four specific configurations chosen to illustrate each new codebook's distinctive behavior, not a general sweep."
+  }
+}

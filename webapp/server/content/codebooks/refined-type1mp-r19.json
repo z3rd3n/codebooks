@@ -1,0 +1,54 @@
+{
+  "id": "refined-type1mp-r19",
+  "name": "Refined Type I Multi-Panel Codebook",
+  "shortName": "Refined Type I (multi-panel)",
+  "release": "R19",
+  "specClause": "TS 38.214 §5.2.2.2.2a",
+  "docFile": "07-refined-r19.md",
+  "position": 11,
+  "lineage": {"parent": "type1-mp", "adds": "each panel picks its own beam direction, on very large aggregated multi-panel arrays"},
+  "tagline": "Multi-panel Type I, scaled up — but now every panel points its own spotlight instead of sharing one direction across the whole array.",
+  "overview": [
+    "Release 15's multi-panel Type I (also in this catalog) shares a single beam direction across every panel and only reports how to phase-align the panels afterward — like several spotlights all aimed the same way, adjusted only for cable-length differences. Refined Type I Multi-Panel, targeting Release 19's very large **aggregated** arrays (up to 128 ports assembled from multiple panels), goes further: **each panel selects its own beam direction**, independently, over the full oversampled grid — plus its own companion-beam offset at ranks 2-4. Different panels can genuinely point at different angles.",
+    "The supported geometries are the Release-19 multi-panel table: combinations like 2 panels of 4x3 ports (48 total), 2 panels of 8x2 (64 total), or 4 panels of 8x2 (128 total) — always with the fixed oversampling $(O_1,O_2)=(4,4)$ that all the large-array Release-19 codebooks share. On top of each panel's independent beam and offset, the codebook keeps the R15 multi-panel machinery for aligning the panels: wideband **inter-panel co-phasing** indices, and per-subband, per-panel polarization co-phasing.",
+    "Conceptually this is the natural generalization: single-panel Type I got \"one direction gets independent companions at high rank\" (the sibling refined single-panel codebook); multi-panel Type I gets \"every panel gets its own direction.\" Both refinements answer the same underlying observation — that a single shared parameter (one beam, or one fixed offset table) becomes an increasingly poor approximation as the array grows large and structurally complex.",
+    "As with the other Release-19 refined codebooks in this family, the reconstruction machinery — DFT (discrete Fourier transform) beams, the QPSK (quadrature phase-shift keying) co-phasing families, the panel-major port layout — is inherited essentially unchanged from R15 multi-panel Type I. What changes is purely the *configuration and selection freedom*: each panel now searches and reports its own beam rather than sharing one across the array."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel across all panels of a large aggregated array", "body": "The phone estimates the channel via CSI-RS (channel state information reference signal) across an array built from several panels totaling 48, 64, or 128 ports."},
+    {"title": "UE selects a beam independently for each panel", "body": "Unlike R15 multi-panel (one shared beam), each panel's own best direction is found separately on the oversampled grid, plus, at ranks 2-4, that panel's own companion-beam offset."},
+    {"title": "UE finds inter-panel co-phasing", "body": "Just as in R15 multi-panel, the UE reports wideband QPSK phase offsets aligning each panel to the reference panel."},
+    {"title": "UE refines per-subband, per-panel co-phasing", "body": "For each frequency unit, per-panel polarization co-phasing is chosen to maximize the reconstructed precoder's quality."},
+    {"title": "Report travels over the uplink", "body": "Every panel's independent beam and offset indices, the inter-panel phase offsets, and the per-subband co-phasing form the PMI (precoding matrix indicator)."},
+    {"title": "gNB reconstructs and transmits", "body": "The base station (gNB) rebuilds each panel's own beam, applies the inter-panel and per-subband phase corrections, and transmits across the full aggregated array."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "Each panel's own horizontal beam position (reported per panel).", "detail": "Unlike R15 multi-panel's single shared i11, this codebook reports one horizontal beam index per panel over the large oversampled grid."},
+    {"field": "i12", "plain": "Each panel's own vertical beam position.", "detail": "Paired with i11, one per panel."},
+    {"field": "i13", "plain": "Each panel's own companion-beam offset selector (ranks 2-4).", "detail": "The same fixed-offset table style as the refined single-panel codebook's low-rank case, applied independently per panel."},
+    {"field": "i14", "plain": "Wideband inter-panel co-phasing, aligning each panel to the reference panel.", "detail": "Same role as R15 multi-panel's i14: one QPSK phase index per non-reference panel."},
+    {"field": "i2", "plain": "Per-subband, per-panel polarization co-phasing.", "detail": "Refreshed every frequency unit, same structural role as R15 multi-panel's i2."}
+  ],
+  "parametersExplained": [
+    {"key": "n_trp", "plain": "Not applicable to this codebook (that parameter belongs to the CJT family) — the relevant geometry knob here is the panel count Ng, chosen together with N1/N2 from the Release-19 multi-panel table.", "guidance": "Pick one of the supported (Ng, N1, N2) combinations for the target port count (48, 64, or 128)."},
+    {"key": "rank", "plain": "How many simultaneous data streams (1-4) to describe.", "guidance": "Multi-panel codebooks in this family cap at rank 4, reflecting the added complexity of independently coordinating multiple panels."}
+  ],
+  "strengths": [
+    "Each panel points its own direction, closing the biggest structural gap in R15 multi-panel's shared-beam design.",
+    "Scales cleanly to the large Release-19 aggregated arrays (up to 128 ports).",
+    "Reuses proven R15 multi-panel co-phasing and reconstruction machinery.",
+    "Still far cheaper than any Type II-family report."
+  ],
+  "limitations": [
+    "Only defined for the fixed set of Release-19 multi-panel geometries.",
+    "Independent per-panel beams cost more bits than R15's single shared beam.",
+    "Capped at rank 4, same as R15 multi-panel.",
+    "Like all Type I variants, reports directions rather than weighted combinations, so it remains coarser than Type II on richly scattered channels."
+  ],
+  "whenToUse": "Use this codebook to model very large antenna installations physically assembled from multiple independently-steerable panels, where each panel may need to point at a genuinely different direction.",
+  "mathHighlight": {
+    "caption": "Each panel contributes its own beam vector to the stacked precoder column, phase-aligned to the reference panel by the inter-panel co-phasing terms.",
+    "latex": "W^{(1)} \\propto \\big[\\, v^{(0)};\\ \\varphi_n v^{(0)};\\ a_1 v^{(1)};\\ \\varphi_n a_1 v^{(1)};\\ \\dots \\,\\big]^{\\top}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "DFT beam", "oversampling", "rank/layer", "port", "QPSK"]
+}

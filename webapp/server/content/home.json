@@ -1,0 +1,68 @@
+{
+  "hero": {
+    "title": "CSI Codebook Studio",
+    "subtitle": "Explore, run, and compare every 5G NR precoding codebook — from a 2-bit table lookup to multi-site coherent transmission — without reading a single page of the 3GPP spec."
+  },
+  "story": [
+    "A 5G base station (the **gNB**, roughly \"the tower\") has many antennas, and it can aim its signal — not by physically moving anything, but by carefully choosing the phase and strength each antenna transmits with. Aimed well, the signals from all antennas add up constructively exactly where your phone is. Aimed badly, they smear energy everywhere and interfere with everyone. The recipe for this aiming is a matrix called a **precoder**, and picking a good one requires knowing how the radio channel between tower and phone actually behaves right now.",
+    "Here is the catch: the channel can only be measured at the **phone** (the **UE**, user equipment). The tower transmits a known pilot signal (**CSI-RS**, channel state information reference signal); the phone compares what it received against what was sent, and from that learns which directions the signal arrives from, which frequencies fade, and how everything is changing. But the tower is the one that needs this knowledge — so the phone must send its measurement back over the uplink. That report is called **CSI feedback**, and the part of it this site is about is the **PMI** (precoding matrix indicator): the phone's answer to \"how should you aim?\"",
+    "The tension that shapes everything: the uplink is a scarce, shared resource, so the report must be **tiny** — tens to a few hundred bits — while the thing it describes is a rich complex-valued matrix that changes across frequency and time. The 3GPP standard's solution is a **codebook**: an agreed-upon, structured menu of possible precoders, so the phone only sends compact *indices* into that menu rather than raw numbers. The tower reconstructs the exact precoder from the indices using a fixed formula. How the menu is structured — one beam or a weighted mix of beams, per-subband detail or compressed summaries — is what separates the twelve codebooks in this catalog.",
+    "The codebooks form a clean evolutionary chain. Release 15's **Type I** reports a single beam direction — cheap and coarse. **Type II** reports a weighted mix of several beams for every frequency chunk — accurate and expensive. Release 16 noticed the frequency chunks are redundant and compressed them into a few **delay taps** (eType II). Release 17 exploited uplink/downlink reciprocity to shrink the frequency report to almost nothing (**feType II port selection**). Release 18 added compression across **time** — predicting the precoder for future moments from one report (Doppler) — and extended the family to multiple cooperating towers (**CJT**, coherent joint transmission). Release 19 scaled all of it to very large arrays of up to 128 antenna ports with **refined** beam selection.",
+    "Every codebook here implements the same three-method interface — select a PMI from a channel, reconstruct the precoder from a PMI, count the report's bits — and every bit count is verified by a bit-exact serializer. That makes them honest, comparable baselines: you can run any codebook on a realistic channel with one click, see exactly what it reports and what it costs, and watch the accuracy-versus-overhead trade-off that has driven five releases of standardization play out in front of you."
+  ],
+  "timeline": [
+    {
+      "release": "R15",
+      "year": 2018,
+      "id": "type1-sp",
+      "name": "Type I & Type II",
+      "oneLiner": "The two founding philosophies: point at one beam direction (Type I, tiny report) or describe a weighted mix of beams per subband (Type II, accurate but expensive)."
+    },
+    {
+      "release": "R16",
+      "year": 2020,
+      "id": "etype2-r16",
+      "name": "Enhanced Type II (eType II)",
+      "oneLiner": "The pivotal compression step: replace Type II's per-subband coefficients with a handful of delay taps that regenerate the whole frequency response."
+    },
+    {
+      "release": "R17",
+      "year": 2022,
+      "id": "fetype2-r17",
+      "name": "feType II Port Selection",
+      "oneLiner": "Exploit uplink/downlink reciprocity: freely pick the strongest ports and report at most one extra delay tap — a very small report for TDD deployments."
+    },
+    {
+      "release": "R18",
+      "year": 2024,
+      "id": "etype2-doppler-r18",
+      "name": "Doppler, CJT & Predicted PS",
+      "oneLiner": "Fight CSI aging and go multi-site: one report predicts the precoder across several future slots (Doppler), and cooperating towers transmit coherently as one array (CJT)."
+    },
+    {
+      "release": "R19",
+      "year": 2025,
+      "id": "refined-type2-r19",
+      "name": "Refined codebooks",
+      "oneLiner": "Scale everything to 48/64/128-port arrays: Type II needs only a bigger geometry table, while Type I gains genuinely independent beam selection at high rank."
+    }
+  ],
+  "concepts": [
+    {
+      "title": "Beams from a DFT grid",
+      "body": "Rather than describing an arbitrary direction from scratch, every codebook picks directions from a fixed, oversampled grid of **DFT beams** (discrete Fourier transform steering patterns) — a virtual compass with more headings than the antenna array's natural resolution. Naming a grid point costs a few bits; describing a raw complex vector would cost hundreds. Type I names one point; Type II names a few and adds weights."
+    },
+    {
+      "title": "Compression, one axis at a time",
+      "body": "The family's evolution is one idea applied three times: a channel's variation is smooth, so send the *recipe* instead of the samples. R15 Type II sampled coefficients at every frequency chunk; R16 compressed frequency into a few **delay taps**; R18 compressed time into a few **Doppler shifts**. Each new DFT axis turned a per-sample cost into a small, fixed one."
+    },
+    {
+      "title": "Overhead vs accuracy",
+      "body": "Every design choice trades feedback bits against precoder fidelity. Type I costs tens of bits and is coarse; Type II costs hundreds and nearly matches the theoretical ideal. Neither is \"better\" — the right choice depends on channel richness, uplink capacity, and mobility. The figures in this studio (rate-distortion, overhead breakdown, scaling laws) make that trade-off measurable rather than rhetorical."
+    },
+    {
+      "title": "The UE selects, the gNB reconstructs",
+      "body": "The standard fixes only half the problem: given reported indices, the precoder **reconstruction** at the gNB is a fully standardized formula. How the phone **selects** those indices is deliberately left open — any algorithm that produces valid indices works. That open half is exactly where research (including learned, ML-based CSI feedback) plugs in: implement a better selector, and everything downstream stays standard-compliant."
+    }
+  ]
+}

@@ -42,16 +42,33 @@ SNR_REF_DB = 10.0
 
 
 def sweep_points() -> list[tuple]:
-    """(scheme, domain, short config label) for every swept configuration."""
-    pts: list[tuple] = [(Type1Codebook(ANT, N3=N3, mode=m), "antenna", f"mode {m}")
-                        for m in (1, 2)]
+    """(scheme, domain, short config label) for every swept configuration.
+
+    Configurations the standard bars at the current antenna (e.g. R16
+    paramCombination 7-8 need P_CSI-RS >= 32) are skipped rather than raising,
+    so the figure renders for any supported array -- with fewer markers on the
+    smaller ones.
+    """
+    pts: list[tuple] = []
+
+    def add(make, domain: str, label: str) -> None:
+        try:
+            pts.append((make(), domain, label))
+        except ValueError:
+            pass  # configuration not supported at this antenna -- drop the point
+
+    for m in (1, 2):
+        add(lambda m=m: Type1Codebook(ANT, N3=N3, mode=m), "antenna", f"mode {m}")
     for L, n_psk, sa in itertools.product((2, 3, 4), (4, 8), (False, True)):
-        pts.append((R15Type2Codebook(ANT, N3=N3, L=L, n_psk=n_psk, subband_amplitude=sa),
-                    "antenna", f"L{L} {n_psk}PSK{' SA' if sa else ''}"))
+        add(lambda L=L, n_psk=n_psk, sa=sa: R15Type2Codebook(
+            ANT, N3=N3, L=L, n_psk=n_psk, subband_amplitude=sa),
+            "antenna", f"L{L} {n_psk}PSK{' SA' if sa else ''}")
     for pc in range(1, 9):
-        pts.append((R16Type2Codebook(ANT, N3=N3, param_combination=pc), "antenna", f"pc{pc}"))
+        add(lambda pc=pc: R16Type2Codebook(ANT, N3=N3, param_combination=pc),
+            "antenna", f"pc{pc}")
     for pc in range(1, 9):
-        pts.append((R17Type2Codebook(ANT, N3=N3, param_combination=pc), "beam", f"pc{pc}"))
+        add(lambda pc=pc: R17Type2Codebook(ANT, N3=N3, param_combination=pc),
+            "beam", f"pc{pc}")
     return select_families(pts)
 
 

@@ -1,0 +1,53 @@
+{
+  "id": "type1-mp",
+  "name": "Type I Multi-Panel Codebook",
+  "shortName": "Type I (multi-panel)",
+  "release": "R15",
+  "specClause": "TS 38.214 §5.2.2.2.2",
+  "docFile": "02-type1-multi-panel.md",
+  "position": 3,
+  "lineage": {"parent": "type1-sp", "adds": "an inter-panel co-phasing report for arrays physically built from several panels"},
+  "tagline": "The same single-beam idea as Type I, but for a base station antenna assembled from several separately calibrated panels that must be phase-aligned as well as pointed.",
+  "overview": [
+    "Picture a stage with several spotlights bolted to different trusses, each wired up independently. Even if every spotlight points at the same performer, small differences in cable length or amplifier drift mean their light doesn't add up perfectly in phase — someone has to dial in a correction per truss. Type I Multi-Panel solves exactly this problem for base stations: when the antenna array is physically built from **$N_g$ separate panels** (2 or 4 of them), the panels are not phase-calibrated against each other, so the phone (**UE**) must report not only a beam direction (as in single-panel Type I) but also how to align the panels' phases so their signals combine coherently.",
+    "Everything from single-panel Type I carries over unchanged: the same oversampled DFT (discrete Fourier transform) beam grid, the same wideband beam indices $i_{1,1}$/$i_{1,2}$, the same per-subband co-phasing $i_2$ for the two polarizations. What's new is a wideband **inter-panel co-phasing** index $i_{1,4}$ — one QPSK (quadrature phase-shift keying) phase value per panel beyond the first, which is treated as the phase reference. A **codebookMode 2** option (available only for the two-panel arrays) goes further, splitting the panel phase into a coarse wideband part plus a finer per-subband refinement carried inside $i_2$.",
+    "The supported array geometries are fixed by the standard: 8, 16, or 32 total antenna ports, split across 2 or 4 panels in specific $(N_g, N_1, N_2)$ combinations (for example 4 panels of 4x1 ports each, or 2 panels of 2x2). Ranks 1 through 4 are supported, each stacking beams from the two \"families\" (sign patterns) that keep the resulting columns orthogonal — the same trick single-panel Type I uses, just applied per panel.",
+    "The overhead cost is modest: the inter-panel phase index adds only 2 bits per extra panel in Mode 1 (or a fixed 4 bits in Mode 2), which is small next to the per-subband co-phasing cost that dominates for large $N_3$. Multi-panel Type I is therefore the natural choice whenever the physical antenna is genuinely modular — larger installations built by combining smaller manufactured units — rather than a single monolithic array."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the multi-panel channel", "body": "The phone estimates the channel across all ports of all panels using CSI-RS (channel state information reference signal), treating the array as $N_g$ separate polarized sub-arrays."},
+    {"title": "UE searches beams and panel phases together", "body": "Like single-panel Type I, this is an exhaustive rate-maximizing search — but the candidate space now also includes every combination of inter-panel phase offsets, scored in batches to keep the search tractable."},
+    {"title": "UE fixes the wideband beam and panel phases", "body": "The winning beam direction ($i_{1,1}$, $i_{1,2}$, and the rank 2-4 companion offset $i_{1,3}$) plus the inter-panel phase offsets $i_{1,4}$ are chosen once for the whole band."},
+    {"title": "UE refines per-subband co-phasing", "body": "For each frequency unit, the UE picks the best polarization co-phasing (and, in Mode 2, a finer per-subband panel-phase correction) carried in $i_2$."},
+    {"title": "Report travels over the uplink", "body": "The wideband beam and panel-phase indices plus the per-frequency-unit $i_2$ values form the PMI (precoding matrix indicator) sent back to the base station (gNB)."},
+    {"title": "gNB reconstructs and transmits", "body": "The gNB rebuilds the beam per panel, applies the reported inter-panel phase to align the panels, applies the per-subband polarization co-phasing, and transmits."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "The horizontal beam direction, shared across all panels and the whole band.", "detail": "A wideband index into the oversampled horizontal beam grid, identical role to single-panel Type I's $i_{1,1}$."},
+    {"field": "i12", "plain": "The vertical beam direction, shared across all panels and the whole band.", "detail": "Wideband index into the vertical beam grid; omitted when the array has no vertical dimension ($N_2 = 1$)."},
+    {"field": "i14", "plain": "How to phase-align each panel relative to the first (reference) panel.", "detail": "One QPSK phase index per panel beyond panel 0 in codebookMode 1 (or two indices carrying a coarser split in Mode 2), wideband."},
+    {"field": "i2", "plain": "Per-frequency-unit polarization co-phasing (and, in Mode 2, a finer panel-phase refinement).", "detail": "One small index per PMI frequency unit; in Mode 2 it additionally carries two finer per-subband panel-alignment bits beyond the wideband $i_{1,4}$."}
+  ],
+  "parametersExplained": [
+    {"key": "mode", "plain": "codebookMode 1 sets panel phase once for the whole band; mode 2 (only for 2-panel arrays) refines it every subband.", "guidance": "Use mode 1 unless the deployment specifically needs finer per-subband panel alignment and the array has exactly 2 panels."},
+    {"key": "rank", "plain": "How many simultaneous data streams (1-4) the array should carry.", "guidance": "Multi-panel Type I tops out at rank 4, lower than single-panel's 8, reflecting the added complexity of coordinating panels."}
+  ],
+  "strengths": [
+    "Extends single-panel Type I's low overhead to genuinely modular, panel-built arrays.",
+    "The inter-panel phase report is cheap: only 2 bits per extra panel in the common mode.",
+    "Reuses all the single-panel beam-grid and co-phasing machinery, so it stays easy to reconstruct.",
+    "Directly models a realistic deployment pattern: base stations assembled from multiple manufactured panels."
+  ],
+  "limitations": [
+    "Only defined for the standard's fixed panel geometries (8, 16, or 32 ports in specific splits).",
+    "Ranks are capped at 4, versus single-panel's 8.",
+    "codebookMode 2 is only available for 2-panel arrays, not 4-panel.",
+    "The implementation's beam subset restriction only approximates the spec's exact multi-panel group-bitmap semantics."
+  ],
+  "whenToUse": "Use this codebook when modeling a base station physically assembled from separate antenna panels that need explicit phase alignment — a scenario single-panel Type I cannot represent.",
+  "mathHighlight": {
+    "caption": "A rank-1 Mode-1 precoder stacks each panel's beam, phase-rotated by that panel's inter-panel phase $a_p$ and by the shared polarization co-phase $\\varphi_n$.",
+    "latex": "W^{(1)} = \\tfrac{1}{\\sqrt{P}}\\big[\\,v;\\ \\varphi_n v;\\ a_1 v;\\ \\varphi_n a_1 v;\\ \\dots\\,\\big]^{\\top},\\qquad a_p = e^{j\\pi\\, i_{1,4}^{(p)}/2}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "DFT beam", "oversampling", "rank/layer", "port", "codebookMode", "QPSK"]
+}

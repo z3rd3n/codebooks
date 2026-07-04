@@ -1,0 +1,53 @@
+{
+  "id": "type1-sp",
+  "name": "Type I Single-Panel Codebook",
+  "shortName": "Type I",
+  "release": "R15",
+  "specClause": "TS 38.214 §5.2.2.2.1",
+  "docFile": "01-type1-single-panel.md",
+  "position": 2,
+  "lineage": {"parent": "type1-2port", "adds": "a full oversampled beam grid and ranks up to 8, for arrays of 4 or more ports"},
+  "tagline": "Point at the single best direction the channel is coming from, then rotate the two antenna polarizations to line up — the cheapest general-purpose report in the whole family.",
+  "overview": [
+    "Think of a lighthouse operator who, instead of describing the sea in detail, just points a single beam at the brightest ship on the horizon. Type I Single-Panel is that lighthouse: the phone (**UE**) looks at the radio channel and reports **one direction** — a beam picked from a dense, oversampled compass of possible directions — plus a small phase adjustment to line up the two antenna polarizations. There is one shared direction for the whole frequency band (**wideband**), and only a cheap per-frequency-unit tweak on top.",
+    "The beam comes from a **DFT (discrete Fourier transform) beam grid**: a virtual compass with far more headings than there are physical antennas, built by oversampling the array's natural resolution. The UE reports two small indices, $i_{1,1}$ and $i_{1,2}$, that pick a point on this grid — like naming a compass bearing to the nearest degree instead of the nearest cardinal direction. A base station (**gNB**) with a dual-polarized array also needs to know how to combine the two polarizations coherently; that is the co-phasing index $i_2$, refreshed every frequency unit.",
+    "Type I supports **ranks 1 through 8** (how many independent data streams travel at once), with the beam construction growing richer at higher rank: rank 1 is a single beam and a phase; ranks 2-4 add a second, offset companion beam; ranks 5-8 combine three or four fixed beams with prescribed sign patterns. A **codebookMode** switch (Mode 1 vs Mode 2) trades a coarser wideband beam for a finer per-subband refinement, or vice versa — a direct knob on the accuracy/overhead trade-off.",
+    "Because the whole report boils down to a handful of small integers, Type I is by far the cheapest general-purpose codebook here — tens of bits, not hundreds. The price is fidelity: a single beam is a poor description of a channel that arrives from many different directions at once (a *rich* or *scattered* channel). Type I shines when the channel is spatially sparse — dominated by one or two clear paths — and struggles as richness grows, which is exactly the gap the Type II family (next in this catalog) was built to close."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel", "body": "The phone estimates the channel from CSI-RS (channel state information reference signal) pilots across all configured antenna ports and frequency units."},
+    {"title": "UE searches the beam grid by rate, not by energy", "body": "Unlike the Type II family, Type I scores every candidate beam (and, at rank 2-4, every companion-beam offset) and every co-phasing state directly by the data rate it would achieve at a nominal SNR (signal-to-noise ratio) — an exhaustive rate-maximizing search rather than an energy-capture heuristic."},
+    {"title": "UE fixes one wideband beam direction", "body": "The winning beam indices ($i_{1,1}$, $i_{1,2}$, and for rank 2-4 the companion offset $i_{1,3}$) are chosen once for the entire reporting band — this is the wideband part of the report."},
+    {"title": "UE refines per-subband co-phasing", "body": "For each frequency unit, the UE independently picks the best co-phasing state $i_2$ that rotates the two antenna polarizations into alignment (and, in codebookMode 2 at low rank, a fine beam offset folded into the same index)."},
+    {"title": "Report travels over the uplink", "body": "The compact index set — a few wideband integers plus one small index per frequency unit — is sent back to the gNB as the PMI (precoding matrix indicator)."},
+    {"title": "gNB reconstructs and transmits", "body": "The gNB looks up the exact DFT beam(s) and applies the reported phase rotations using a fixed, standardized formula, then transmits with that precoder."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "The horizontal beam direction, shared by the whole frequency band.", "detail": "A wideband index into the oversampled horizontal beam grid (size $G_1 = N_1 O_1$). It is always reported."},
+    {"field": "i12", "plain": "The vertical beam direction, shared by the whole frequency band.", "detail": "A wideband index into the oversampled vertical beam grid (size $G_2 = N_2 O_2$). Omitted entirely for 1-D arrays where $N_2 = 1$."},
+    {"field": "i13", "plain": "Which offset positions the companion beam(s) for multi-layer reports.", "detail": "Reported only for ranks 2-4; selects the fixed offset $(k_1, k_2)$ of the second beam relative to the first, from a small standardized table."},
+    {"field": "i2", "plain": "The per-frequency-unit co-phasing (and, in Mode 2, a fine beam refinement).", "detail": "One small index per PMI frequency unit that rotates the two antenna polarizations into phase alignment; in codebookMode 2 at rank 1-2 it also carries a fine offset that sharpens the wideband beam."}
+  ],
+  "parametersExplained": [
+    {"key": "mode", "plain": "codebookMode 1 reports one coarse wideband beam; mode 2 reports a coarser wideband beam but refines it every subband.", "guidance": "Pick mode 1 for the cheapest report; pick mode 2 only when the channel's direction is expected to be finer than the base grid resolution and you can afford wider per-subband indices."},
+    {"key": "rank", "plain": "How many simultaneous data streams (1-8) to describe.", "guidance": "Higher ranks reuse the same beam machinery with fixed sign/offset patterns rather than independently optimized directions — expect diminishing fidelity gains as rank grows."}
+  ],
+  "strengths": [
+    "By far the cheapest general-purpose report in the catalog — tens of bits, not hundreds.",
+    "Reconstruction is a closed-form lookup and rotation, trivial for the gNB to compute.",
+    "Works well when the channel is spatially sparse (few dominant propagation paths).",
+    "Scales to ranks up to 8 using the same beam-grid machinery."
+  ],
+  "limitations": [
+    "A single beam direction cannot represent a channel that arrives from many angles at once.",
+    "Higher ranks are built from fixed offsets and sign patterns, not independently optimized directions.",
+    "Per-subband adaptation is limited to a phase tweak, not a new direction.",
+    "Codebook subset restriction is only approximated at per-beam granularity in this implementation, not the exact spec group-bitmap rule."
+  ],
+  "whenToUse": "Use Type I when feedback overhead must be minimal and the channel is reasonably sparse — for example a line-of-sight or lightly scattered link — or as the cheap baseline against which every richer codebook's accuracy-per-bit is measured.",
+  "mathHighlight": {
+    "caption": "At rank 1 the precoder is one DFT beam, duplicated onto both polarizations with a QPSK phase rotation between them, normalized so the total transmit power stays fixed.",
+    "latex": "W^{(1)}_{l,m,n} = \\frac{1}{\\sqrt{P}}\\begin{bmatrix} v_{l,m} \\\\ \\varphi_n\\, v_{l,m} \\end{bmatrix},\\qquad \\varphi_n = e^{j\\pi n/2}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "DFT beam", "oversampling", "rank/layer", "subband", "codebookMode", "port"]
+}

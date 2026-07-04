@@ -97,6 +97,35 @@ class R18Type2Codebook(CodebookScheme):
         if R not in (1, 2):
             raise ValueError("R must be 1 or 2")
         self.R = R
+        if ri_restriction is None:
+            ri_restriction = np.ones(4, dtype=bool)
+        self.ri_restriction = np.asarray(ri_restriction, dtype=bool)
+        if self.ri_restriction.shape != (4,):
+            raise ValueError("typeII-Doppler-RI-Restriction-r18 must have 4 bits [r0..r3]")
+        # Configuration bars of 5.2.2.2.10: "The UE is not expected to be
+        # configured with paramCombination-Doppler-r18 equal to ...".
+        if antenna.P == 4 and param_combination >= 4:
+            raise ValueError(
+                f"paramCombination-Doppler-r18={param_combination} is not supported "
+                f"at P_CSI-RS=4 (5.2.2.2.10 bars combinations 4-9)"
+            )
+        if param_combination in (8, 9):
+            if antenna.P < 32:
+                raise ValueError(
+                    f"paramCombination-Doppler-r18={param_combination} requires "
+                    f"P_CSI-RS >= 32 (got {antenna.P})"
+                )
+            if R == 2:
+                raise ValueError(
+                    f"paramCombination-Doppler-r18={param_combination} is not "
+                    f"supported with R=2"
+                )
+            if bool(self.ri_restriction[2] or self.ri_restriction[3]):
+                raise ValueError(
+                    f"paramCombination-Doppler-r18={param_combination} requires ranks "
+                    f"3-4 disallowed (typeII-Doppler-RI-Restriction-r18 with r_i=0 "
+                    f"for i>1)"
+                )
         self.combo = R18_PARAM_COMBOS[param_combination]
         self.L = self.combo.L
         self.Q = 1 if N4 == 1 else 2  # protocol freezes Q = 2 (1 when N4 = 1)
@@ -107,11 +136,6 @@ class R18Type2Codebook(CodebookScheme):
             )
         if N3 < 1:
             raise ValueError("N3 must be positive")
-        if ri_restriction is None:
-            ri_restriction = np.ones(4, dtype=bool)
-        self.ri_restriction = np.asarray(ri_restriction, dtype=bool)
-        if self.ri_restriction.shape != (4,):
-            raise ValueError("typeII-Doppler-RI-Restriction-r18 must have 4 bits [r0..r3]")
         for v in (1, 2, 3, 4):  # fail at construction, not first use
             if v >= 3 and self.combo.p_v34 is None:
                 continue
@@ -311,10 +335,16 @@ class R18Type2Codebook(CodebookScheme):
         else:
             bits["i16"] = v * math.ceil(math.log2(comb(self.N3 - 1, Mv - 1)))
         bits["i17"] = v * 2 * L * Mv * self.Q
-        bits["i18"] = v * math.ceil(math.log2(2 * L * self.Q))
+        K_nz = int(pmi.i17.sum())
+        # TS 38.212 Table 6.3.2.1.2-1C: rank 1 spends ceil(log2(K^NZ)) bits on
+        # the strongest-coefficient indicator; ranks 2-4 spend ceil(log2(2LQ))
+        # per layer.
+        if v == 1:
+            bits["i18"] = math.ceil(math.log2(K_nz)) if K_nz > 1 else 0
+        else:
+            bits["i18"] = v * math.ceil(math.log2(2 * L * self.Q))
         if self.N4 > 1:
             bits["i110"] = v * math.ceil(math.log2(self.N4 - 1))  # 0 bits when N4 = 2
-        K_nz = int(pmi.i17.sum())
         bits["i23"] = 4 * v
         bits["i24"] = 3 * (K_nz - v)
         bits["i25"] = 4 * (K_nz - v)

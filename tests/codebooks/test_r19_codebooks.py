@@ -71,8 +71,20 @@ class TestR16PortSelectionGuards:
 
     @pytest.mark.parametrize("idx", [7, 8])
     def test_regular_still_accepts_L6_combos(self, idx):
-        cb = R16Type2Codebook(self.ant, N3=12, param_combination=idx, port_selection=False)
+        # the regular codebook accepts 7/8, but only at P = 32 with ranks 3-4
+        # disallowed (configuration bars of 5.2.2.2.5)
+        cb = R16Type2Codebook(
+            AntennaConfig.standard(4, 4), N3=12, param_combination=idx,
+            port_selection=False, ri_restriction=[1, 1, 0, 0],
+        )
         assert cb.L == 6
+
+    @pytest.mark.parametrize("idx", [7, 8])
+    def test_regular_L6_combos_barred_below_32_ports(self, idx):
+        with pytest.raises(ValueError, match="P_CSI-RS >= 32"):
+            R16Type2Codebook(
+                self.ant, N3=12, param_combination=idx, ri_restriction=[1, 1, 0, 0]
+            )
 
     def test_ps_enforces_d_le_L(self):
         # combo 1 -> L = 2, so d = 3 (<= 4 but > L) must be rejected.

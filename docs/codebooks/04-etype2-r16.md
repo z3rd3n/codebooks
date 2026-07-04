@@ -146,10 +146,12 @@ configured with..."):**
 * combos 7,8 when *typeII-RI-Restriction-r16* sets $r_i = 1$ for any $i > 1$;
 * combos 7,8 when $R = 2$.
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** These
-> per-port-count / RI-restriction / $R=2$ prohibitions on combos 3–8 are not
-> enforced. The code validates $L \le N_1N_2$ at construction but accepts any
-> table row for any port count.
+All four prohibitions are enforced at construction:
+`R16Type2Codebook.__init__` raises `ValueError` for a barred
+`param_combination` given the antenna's port count, the configured
+`ri_restriction`, and `R`. The `combo=` escape hatch (generalized parameter
+sweeps outside the standardized table) bypasses the bars by design. Tests:
+[test_restriction_guards.py](../../tests/spec/test_restriction_guards.py).
 
 ### 2.3 The Enhanced Type II Port-Selection table (Table 5.2.2.2.6-1)
 
@@ -389,9 +391,9 @@ This is the canonical Type II selection; R17/R18 mirror it. Per
 
 ---
 
-## 8. Codebook subset restriction & RI restriction (mostly unimplemented)
+## 8. Codebook subset restriction & RI restriction
 
-The spec defines two restriction mechanisms for eType II; neither is enforced by
+The spec defines two restriction mechanisms for eType II; both are enforced by
 the codebase.
 
 **`n1-n2-codebookSubsetRestriction-r16` (CSR).** A bitmap $B = B_1 B_2$ that
@@ -412,19 +414,25 @@ $\sqrt{\tfrac{1}{\sum_f k^{(3)}_{l,i+pL,f}}\sum_f k^{(3)}_{l,i+pL,f}
 \big(p^{(1)}_{l,p}p^{(2)}_{l,i+pL,f}\big)^2} \le \gamma_{i+pL}$. Fields `01`/`10`
 require the UE to advertise *amplitudeSubsetRestriction-r16 = supported*.
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** No `codebookSubsetRestriction`
-> for eType II: neither the SD-group beam restriction nor the per-beam average-amplitude
-> cap (Table 5.2.2.2.5-6 / *amplitudeSubsetRestriction-r16*) is modeled in
-> [validate.py](../../src/nr_csi/codebooks/validate.py) or `select`.
+**Code:** class
+[`R16AmplitudeRestriction`](../../src/nr_csi/codebooks/etype2_r16.py) — same
+$B_1 B_2$ wire format as the R15 `TypeIIRestriction` (combinatorial group
+index + one 2-bit codepoint per beam of each restricted group), passed as
+`R16Type2Codebook(..., restriction=...)` (regular variant only). `select`
+(i) skips $\gamma = 0$ beams during group/beam selection, (ii) places the
+strongest coefficient (fixed $p^{(1)}p^{(2)} = 1$) on a $\gamma = 1$ beam
+whenever one exists, and (iii) post-quantization, greedily decrements the
+largest $k^{(2)}$ of each violating beam until the average-amplitude
+constraint holds (the rank-1 $i_{1,8}$ is encoded after this pass, since it
+counts nonzero bitmap bits). Tests:
+[test_restriction_guards.py](../../tests/spec/test_restriction_guards.py).
 
 **`typeII-RI-Restriction-r16`** (and `typeII-PortSelectionRI-Restriction-r16` for
 PS): a 4-bit sequence $r_3 r_2 r_1 r_0$; $r_i = 0$ forbids reporting
-$\upsilon = i+1$ layers.
-
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** RI restriction
-> (`typeII-RI-Restriction-r16` / `typeII-PortSelectionRI-Restriction-r16`) is not
-> enforced; `select`/`precoder` accept any rank in 1–4 (subject only to the
-> param-combo's rank-3/4 support).
+$\upsilon = i+1$ layers. Enforced by `select` via the `ri_restriction`
+constructor argument (`[r0..r3]`); the error message names the PS parameter
+for the PS variant. The bitmap also feeds the combo-7/8 configuration bar
+(§2.2).
 
 ---
 

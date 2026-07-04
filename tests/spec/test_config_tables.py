@@ -184,11 +184,12 @@ class TestDerivedQuantities:
 
         from nr_csi.codebooks.etype2_r16 import R16Type2Codebook
 
-        ant = AntennaConfig.standard(4, 2)
+        ant = AntennaConfig.standard(4, 4)  # P = 32: every combination allowed
         for idx, (L, p12, _, beta) in TABP_R16.items():
             M1 = math.ceil(p12 * N3)
             expected = math.ceil(beta * 2 * L * M1)
-            cbk = R16Type2Codebook(ant, N3=N3, param_combination=idx)
+            ri = [1, 1, 0, 0] if idx in (7, 8) else None
+            cbk = R16Type2Codebook(ant, N3=N3, param_combination=idx, ri_restriction=ri)
             assert cbk.K0 == expected, f"combo {idx}, N3={N3}"
 
     @pytest.mark.parametrize("N3", [12, 18, 36])
@@ -198,12 +199,13 @@ class TestDerivedQuantities:
 
         from nr_csi.codebooks.etype2_r18 import R18Type2Codebook
 
-        ant = AntennaConfig.standard(4, 2)
+        ant = AntennaConfig.standard(4, 4)  # P = 32: every combination allowed
         for idx, (L, p12, _, beta) in TABP_R18.items():
             M1 = math.ceil(p12 * N3)
-            cbk = R18Type2Codebook(ant, N3=N3, N4=4, param_combination=idx)
+            ri = [1, 1, 0, 0] if idx in (8, 9) else None
+            cbk = R18Type2Codebook(ant, N3=N3, N4=4, param_combination=idx, ri_restriction=ri)
             assert cbk.Q == 2
             assert cbk.K0 == math.ceil(2 * beta * L * M1 * 2), f"combo {idx}, N3={N3}"
-            cbk1 = R18Type2Codebook(ant, N3=N3, N4=1, param_combination=idx)
+            cbk1 = R18Type2Codebook(ant, N3=N3, N4=1, param_combination=idx, ri_restriction=ri)
             assert cbk1.Q == 1
             assert cbk1.K0 == math.ceil(2 * beta * L * M1), f"combo {idx}, N3={N3}, N4=1"

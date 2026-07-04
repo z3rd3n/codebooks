@@ -1,0 +1,57 @@
+{
+  "id": "type2-r15",
+  "name": "Type II Codebook",
+  "shortName": "Type II",
+  "release": "R15",
+  "specClause": "TS 38.214 §5.2.2.2.3 / §5.2.2.2.4",
+  "docFile": "03-type2-r15.md",
+  "position": 4,
+  "lineage": {"parent": "type1-sp", "adds": "a linear combination of several beams with an independent complex coefficient per beam, per subband"},
+  "tagline": "Instead of pointing at one direction, describe the channel as a weighted mix of a few beams — near-perfect accuracy, at many times the feedback cost.",
+  "overview": [
+    "Type I is like naming the one musical note closest to a sound. Type II is like describing the sound as a **chord**: a weighted mix of a handful of pure notes. Instead of reporting a single beam direction, the phone (**UE**) reports $L$ DFT (discrete Fourier transform) beams (typically 2, 3, or 4) and, for every one of them, a complex **amplitude and phase coefficient** — separately for each antenna polarization and, crucially, separately for **every frequency unit** in the report. That last part is what makes Type II expensive: where Type I sends one direction for the whole band, Type II sends a fresh set of weights for every subband.",
+    "The payoff is fidelity. A weighted combination of a few beams can trace the true dominant eigenvector of the channel (the mathematically ideal precoder direction) far more closely than any single beam can, especially when the channel is **rich** — arriving from many directions at once, which is the normal case in cluttered urban environments. Type II reports typically cost hundreds of bits instead of Type I's tens, but they buy spectral efficiency close to the theoretical ceiling.",
+    "To keep the cost from exploding, Type II does not report every coefficient with full precision. Each layer designates one **strongest coefficient** (rotated to a fixed reference so it costs nothing to report), and the remaining coefficients are split into a *strong* group (full phase resolution, plus an optional per-subband amplitude refinement) and a *weak* group (coarser QPSK phase only). Coefficients with essentially zero weight are dropped entirely. This chapter also covers the **port-selection** variant, which swaps the DFT beam search for simply picking a handful of already-formed antenna ports — useful when the CSI-RS pilots are already beamformed by the network, so there's no angular direction left to search for.",
+    "Type II R15 is the structural template every later release refines: R16 will show that per-subband coefficients are themselves highly redundant across frequency, and compress them further — but the beam-combination idea introduced here survives unchanged all the way through Release 19."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel and computes ideal targets", "body": "The phone estimates the channel via CSI-RS (channel state information reference signal) and computes the per-subband dominant eigenvector — the mathematically ideal, unquantized precoder direction — for each layer."},
+    {"title": "UE picks a group of L beams by energy capture", "body": "The UE tries every orthogonal beam group on the oversampled grid and keeps the group whose best $L$ beams capture the most of the target's energy — a very different criterion from Type I's rate-maximizing search."},
+    {"title": "UE fits per-subband coefficients by least squares", "body": "For each subband and layer, the UE projects the target vector onto the chosen $L$ beams (both polarizations) to get $2L$ complex coefficients — the weighted-mix recipe for that subband."},
+    {"title": "UE quantizes and prunes the coefficients", "body": "The strongest coefficient per layer is designated the reference and rotated to be real and fixed; the rest are ranked, split into a strong subset (fine phase, optional subband amplitude) and a weak subset (QPSK phase only), and near-zero ones are dropped entirely."},
+    {"title": "Report travels over the uplink", "body": "The beam group, the beam combination, and every kept coefficient's amplitude and phase indices are packed into the PMI (precoding matrix indicator) and sent to the gNB."},
+    {"title": "gNB reconstructs and transmits", "body": "The base station (gNB) rebuilds each subband's precoder as the reported weighted sum of the L beams, normalizes it to unit power, and transmits."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "Which orthogonal set of beam directions (rotation) the L beams are drawn from.", "detail": "The wideband rotation indicator $(q_1, q_2)$ selecting one of $O_1 O_2$ orthogonal beam groups on the oversampled grid. In the port-selection variant this becomes the single initial-port index instead."},
+    {"field": "i12", "plain": "Which L specific beams within that group were chosen.", "detail": "A combinatorial index (Algorithm 1) selecting $L$ beams out of the group's $N_1 N_2$ candidates, wideband and shared by all layers."},
+    {"field": "i13", "plain": "Which of the 2L coefficients is the strongest, per layer.", "detail": "Identifies the reference coefficient whose amplitude and phase are fixed by convention and therefore not separately reported."},
+    {"field": "i14", "plain": "The wideband amplitude of every beam-and-polarization coefficient, per layer.", "detail": "A 3-bit index per coefficient (except the strongest) into an 8-level amplitude table, shared across the whole band."},
+    {"field": "i21", "plain": "The phase of every reported coefficient, per subband, per layer.", "detail": "Strong coefficients get full-resolution PSK (phase-shift keying) phase; weak coefficients fall back to coarser QPSK, refreshed every frequency unit — this is the dominant cost of the report."},
+    {"field": "i22", "plain": "An optional per-subband amplitude refinement for the strongest few coefficients.", "detail": "A 1-bit per-subband amplitude correction, reported only when subbandAmplitude is enabled and only for the strong coefficient subset."}
+  ],
+  "parametersExplained": [
+    {"key": "param_combination", "plain": "Not used by this family directly — see L, n_psk, and subband_amplitude below, which play the equivalent role.", "guidance": "Configure L, n_psk, and subband_amplitude individually rather than through a preset table (R15 predates the later releases' parameter-combination tables)."},
+    {"key": "mode", "plain": "Regular vs port-selection is chosen via port_selection, not a mode switch.", "guidance": "Leave port_selection off unless modeling a beamformed / reciprocity-based CSI-RS deployment."},
+    {"key": "port_selection", "plain": "Whether to search DFT beams (off) or simply select individual antenna ports (on).", "guidance": "Turn this on only when the CSI-RS is already concentrated on a handful of ports; otherwise the DFT beam search (off) captures more of the channel's energy."},
+    {"key": "d", "plain": "The port-selection stride: how far apart the sampled ports are (port-selection variant only).", "guidance": "Only meaningful with port_selection on; larger d spreads the L selected ports further apart across the array."}
+  ],
+  "strengths": [
+    "Near-eigenvector fidelity: the closest this family gets to the theoretical ideal precoder before delay/Doppler compression is added.",
+    "Handles rich, multi-path channels far better than a single-beam Type I report.",
+    "The strongest-coefficient and strong/weak partitioning already trims a lot of otherwise-redundant bits.",
+    "The port-selection variant adapts naturally to already-beamformed CSI-RS deployments."
+  ],
+  "limitations": [
+    "Reports cost roughly ten times what Type I costs — hundreds of bits, not tens.",
+    "Coefficients are sent fresh for every subband, which is the single biggest cost driver and exactly what R16 later compresses away.",
+    "Limited to ranks 1-2 only.",
+    "The codebase's port-selection sampling stride is capped tighter (d <= L) than the bare spec requires."
+  ],
+  "whenToUse": "Use Type II R15 when accuracy matters more than feedback overhead and the channel is rich enough that a single Type I beam would badly under-fit it — but be aware that R16 onward delivers similar accuracy far more cheaply by compressing the per-subband redundancy.",
+  "mathHighlight": {
+    "caption": "Each layer's precoder is a weighted sum of the L selected beams, with a separate complex amplitude-times-phase weight for every beam and polarization, normalized to unit power.",
+    "latex": "w^{(l)}_t \\propto \\sum_{i=0}^{L-1} v_{m_1^{(i)},m_2^{(i)}}\\; p^{(1)}_{l,i}\\, p^{(2)}_{l,i}\\, \\varphi_{l,i}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "DFT beam", "subband", "N3", "rank/layer", "SGCS", "overhead bits", "dual polarization"]
+}

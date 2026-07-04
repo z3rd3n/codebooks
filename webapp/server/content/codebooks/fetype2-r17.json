@@ -1,0 +1,56 @@
+{
+  "id": "fetype2-r17",
+  "name": "Further-Enhanced Type II Port Selection (feType II PS)",
+  "shortName": "feType II PS",
+  "release": "R17",
+  "specClause": "TS 38.214 §5.2.2.2.7",
+  "docFile": "05-fetype2-r17.md",
+  "position": 6,
+  "lineage": {"parent": "etype2-r16", "adds": "free (any-combination) port selection and a tiny reciprocity-based delay window"},
+  "tagline": "When the tower already knows the delays from the uplink, the phone barely needs to mention frequency at all — just say which ports matter, freely, and one or two taps.",
+  "overview": [
+    "In a **TDD (time-division duplex)** network, uplink and downlink share the same frequency, so the base station (**gNB**) can often measure the channel's delays directly from what the phone sends it — a property called **delay reciprocity**. If the gNB already knows the delays, why should the phone (**UE**) spend bits re-describing them? Further-enhanced Type II port selection is built around exactly that shortcut: it pre-compensates the bulk delay so the dominant energy sits at delay-tap zero, and the UE only needs to report at most **one extra tap** ($M \\in \\{1,2\\}$) within a small window — instead of R16's search across a handful of taps spread over the whole band.",
+    "The other big change is the spatial report. R16's port-selection variant picked a *consecutive, strided* run of ports; R17 makes port selection **free** — the UE may choose any $L$ of the $P/2$ ports per polarization, encoded with a general combinatorial index (Algorithm 4). This is a strictly more flexible spatial report, well suited to CSI-RS that is already beamformed onto a scattered set of strong ports rather than a tidy consecutive block.",
+    "Configuration runs through the parameter triple $(M, \\alpha, \\beta)$: $\\alpha$ sets what fraction of the ports are used ($K_1 = \\alpha P$), $M$ is the tap count, and $\\beta$ sets the coefficient budget fraction. When $\\alpha = 1$ all ports are used and the port-selection index isn't even reported. Everything else — the amplitude/phase quantization tables, the bitmap, the strongest-coefficient convention — is inherited unchanged from R16 (eType II); only the spatial basis and the tap window differ.",
+    "An interesting and counter-intuitive property falls out of this design: because the port budget $K_1$ grows with the array size $P$, a **larger array gives R17 more ports to combine and proportionally more coefficient budget** — so its reconstruction accuracy can actually *improve* as the array grows, the opposite of the usual \"bigger array, harder to feed back\" intuition. This chapter's codebook also underlies the R18 predicted port-selection variant, which reuses this exact machinery for a single future time interval."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel and aligns per-port phase", "body": "The phone estimates the channel via CSI-RS (channel state information reference signal) and phase-aligns each port's per-subband coefficient to a common reference."},
+    {"title": "UE freely selects the strongest ports", "body": "Instead of picking a consecutive strided run, the UE ranks all P/2 ports per polarization by accumulated energy and keeps the L strongest, encoding the chosen set with a general combinatorial index."},
+    {"title": "UE finds at most one extra delay tap", "body": "Tap 0 is always assumed present (the reciprocity reference). If the configuration allows a second tap, the UE searches only a tiny window (of size N) for the strongest additional delay."},
+    {"title": "UE quantizes amplitude, phase, and the coefficient bitmap", "body": "Exactly the R16 machinery: a per-polarization reference amplitude, a per-coefficient differential amplitude, a 16-PSK (phase-shift keying) phase, and a bitmap marking which of the port/tap coefficients survive the budget."},
+    {"title": "Report travels over the uplink", "body": "The freely-chosen port combination, at most one tap offset, the bitmap, and the quantized coefficients form the PMI (precoding matrix indicator)."},
+    {"title": "gNB reconstructs using its own known delays and transmits", "body": "The base station combines the reported port weights with the tiny reported delay structure (leaning on its own reciprocity-derived delay knowledge) to rebuild the full per-subband precoder, then transmits."}
+  ],
+  "whatIsReported": [
+    {"field": "i12", "plain": "Which L ports (out of P/2) were freely selected, per polarization.", "detail": "A general combinatorial index (Algorithm 4) over any subset of ports — not a fixed stride — reported only when alpha < 1 (i.e. not all ports are used)."},
+    {"field": "i16", "plain": "The offset of the second delay tap, if a second tap is used.", "detail": "Reported only when M=2 and the window size N=4; identifies which of a few nearby delay offsets carries the second tap's energy."},
+    {"field": "i17", "plain": "A bitmap marking which port/tap coefficients are nonzero, per layer.", "detail": "Same role as R16's bitmap, now over the freely selected ports and the (at most 2) delay taps."},
+    {"field": "i18", "plain": "Which coefficient is the strongest, per layer.", "detail": "A flat index over port and tap position identifying the reference coefficient, whose amplitude and phase are then fixed by convention."},
+    {"field": "i23", "plain": "The per-polarization reference amplitude, per layer.", "detail": "Same 4-bit-per-polarization mechanism as R16; only the non-strongest polarization's value is actually reported."},
+    {"field": "i24", "plain": "The differential amplitude for each kept coefficient.", "detail": "3-bit refinement per reported coefficient, identical table to R16."},
+    {"field": "i25", "plain": "The 16-PSK phase for each kept coefficient.", "detail": "4-bit phase index per reported coefficient, identical table to R16."}
+  ],
+  "parametersExplained": [
+    {"key": "param_combination", "plain": "A preset (1-8) bundling the tap count M, the port fraction alpha, and the coefficient budget fraction beta.", "guidance": "Higher combinations use more ports and/or a richer coefficient budget; combinations 1 and 6 are barred at very small arrays (4 or 12 ports) because they'd require a non-integer or odd port count."},
+    {"key": "n_window", "plain": "The size of the small window the second delay tap is searched within, when a second tap is used.", "guidance": "Only matters when the chosen parameter combination uses M=2 taps."}
+  ],
+  "strengths": [
+    "Extremely cheap frequency-domain report — at most one extra tap, thanks to reciprocity-based delay pre-compensation.",
+    "Free (unrestricted) port selection captures scattered strong ports that a fixed-stride scheme would miss.",
+    "Accuracy can improve, not degrade, as the antenna array grows larger.",
+    "Reuses R16's proven amplitude/phase/bitmap machinery, so it stays easy to reconstruct."
+  ],
+  "limitations": [
+    "Assumes TDD-style delay reciprocity — the gNB already knowing the delays is the whole premise, so it is less natural for FDD (frequency-division duplex) deployments.",
+    "Only meaningful when the CSI-RS is already beamformed or port-reduced; it has no DFT beam search of its own.",
+    "The R=2 subband-pairing factor is validated but not applied to the reconstructed frequency-unit count.",
+    "The spec's \"skip the bitmap when fully populated\" optimization is not applied, so the bitmap is always sent in full even in that rare case."
+  ],
+  "whenToUse": "Use feType II PS in TDD deployments where uplink/downlink reciprocity means the gNB already has good delay knowledge, and where CSI-RS is concentrated on a scattered set of ports rather than a full DFT beam search being useful.",
+  "mathHighlight": {
+    "caption": "The reconstructed coefficient sums over at most two delay taps and the freely selected ports, with tap 0 always present as the reciprocity-compensated reference.",
+    "latex": "\\sum_{i=0}^{L-1} v_{m^{(i)}}\\, p^{(1)}_{l,0}\\, \\sum_{f=0}^{M-1} y_t^{(f)}\\, p^{(2)}_{l,i,f}\\, \\varphi_{l,i,f}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "port selection", "delay tap", "N3", "rank/layer", "overhead bits", "param combination"]
+}

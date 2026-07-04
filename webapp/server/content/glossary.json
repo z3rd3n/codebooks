@@ -1,0 +1,207 @@
+[
+  {
+    "term": "PMI",
+    "short": "Precoding matrix indicator — the phone's report of which precoder to use.",
+    "long": "PMI stands for precoding matrix indicator. It is the index (or set of indices) the phone sends back to the base station identifying which precoder, from an agreed-upon codebook, best matches the channel it measured. This whole site is about how different PMI codebooks are structured, how expensive they are to report, and how accurately they let the base station reconstruct a good precoder."
+  },
+  {
+    "term": "RI",
+    "short": "Rank indicator — how many independent data streams to send.",
+    "long": "RI stands for rank indicator. It tells the base station how many independent spatial data streams (layers) the phone believes the channel can support well, ranging from 1 up to as many as 8 depending on the codebook. RI is reported alongside PMI, though this project focuses on PMI computation and treats rank as an input rather than something it selects."
+  },
+  {
+    "term": "CQI",
+    "short": "Channel quality indicator — how good a modulation and coding rate to use.",
+    "long": "CQI stands for channel quality indicator. It tells the base station what modulation and coding scheme the channel can currently support, based on the phone's measured signal quality after applying the reported precoder. CQI computation is not modeled in this project; only the PMI (precoder) part of the CSI report is implemented."
+  },
+  {
+    "term": "CSI",
+    "short": "Channel state information — everything the phone measures about the radio channel.",
+    "long": "CSI stands for channel state information: the phone's measurement of how the radio channel behaves, including its strength, direction, and frequency response. A CSI report to the base station typically bundles RI, PMI, and CQI together; this project implements the PMI codebooks that are the heart of that report."
+  },
+  {
+    "term": "CSI-RS",
+    "short": "Channel state information reference signal — the tower's known pilot signal.",
+    "long": "CSI-RS stands for channel state information reference signal. It is a known pilot signal the base station transmits so the phone can measure the radio channel by comparing what it received against what was actually sent. Every codebook's report is computed from a CSI-RS measurement."
+  },
+  {
+    "term": "gNB",
+    "short": "The 5G base station (the cell tower).",
+    "long": "gNB is the 3GPP term for a 5G base station — the network side of the radio link, roughly equivalent to a cell tower. The gNB transmits CSI-RS pilots, receives the phone's PMI report, and reconstructs the precoder from it before transmitting data."
+  },
+  {
+    "term": "UE",
+    "short": "User equipment — the phone or device receiving the signal.",
+    "long": "UE stands for user equipment: the phone, tablet, or other device on the receiving end of the radio link. The UE measures the channel, selects a PMI according to the codebook's rules, and reports it back to the gNB. Selecting a good PMI is not fully standardized — only the space of representable precoders is — so different UEs may use different selection algorithms."
+  },
+  {
+    "term": "precoder",
+    "short": "The matrix the base station applies to antennas before transmitting.",
+    "long": "A precoder is a matrix that shapes how a base station's antennas jointly transmit a signal so it arrives constructively at the intended receiver. Every codebook in this catalog defines a set of standardized precoders and a compact way to identify one of them (the PMI); reconstructing the exact precoder from a PMI is always a fixed, fully standardized formula."
+  },
+  {
+    "term": "beamforming",
+    "short": "Shaping how multiple antennas combine to focus energy in a direction.",
+    "long": "Beamforming is the general technique of combining signals across multiple antennas, with carefully chosen phase and amplitude weights per antenna, so the transmitted (or received) energy concentrates in a particular spatial direction. PMI codebooks are, at their core, standardized ways to describe a beamforming weight vector cheaply."
+  },
+  {
+    "term": "DFT beam",
+    "short": "One steering direction from an oversampled discrete Fourier transform grid.",
+    "long": "A DFT (discrete Fourier transform) beam is a specific antenna weight pattern that steers energy toward one direction, drawn from a fixed, oversampled grid of possible directions. Type I and Type II codebooks report which DFT beam (or beams) best match the channel instead of describing an arbitrary direction from scratch."
+  },
+  {
+    "term": "oversampling",
+    "short": "Using a finer beam grid than the antenna array's natural resolution.",
+    "long": "Oversampling means using more candidate beam directions than the physical antenna array's element count alone would naturally provide, by inserting extra points between the array's native resolution. This gives the codebook a finer angular compass to report from, at the cost of needing more bits to name a specific grid point."
+  },
+  {
+    "term": "subband",
+    "short": "A chunk of frequency the phone reports channel information for.",
+    "long": "A subband is a group of adjacent frequency resource blocks that the network configures as one reporting unit for channel feedback. Some PMI fields are wideband (one value for the entire reporting band) while others are reported per subband, trading feedback cost for how finely the report tracks changes across frequency."
+  },
+  {
+    "term": "N3",
+    "short": "The number of PMI frequency units in a report.",
+    "long": "N3 is the total number of PMI frequency units the codebook reports over — essentially how finely the frequency axis is sliced. It equals the number of configured CQI subbands times R (a 1-or-2 multiplier). Larger N3 means finer frequency resolution but a more expensive report, since several PMI fields scale directly with N3."
+  },
+  {
+    "term": "rank/layer",
+    "short": "The number of independent data streams (rank) and each one (a layer).",
+    "long": "Rank is the number of independent spatial data streams a precoder carries at once; each individual stream is called a layer. Higher rank lets more data flow simultaneously over the same channel, but only when the channel has enough independent spatial paths to support it, and every codebook's precoder construction changes structurally as rank increases."
+  },
+  {
+    "term": "SGCS",
+    "short": "Squared generalized cosine similarity — how closely a precoder matches the ideal direction.",
+    "long": "SGCS (squared generalized cosine similarity) is the standard 3GPP metric for how closely a reconstructed, quantized precoder's direction matches the true ideal channel eigenvector, independent of signal strength. An SGCS of 1 means a perfect directional match; this project uses it to compare codebooks' fidelity at a given bit budget."
+  },
+  {
+    "term": "spectral efficiency",
+    "short": "Data throughput per unit of bandwidth, in bits per second per Hertz.",
+    "long": "Spectral efficiency (SE) measures how much data can be reliably sent per unit of radio bandwidth, in bits per second per Hertz. It depends on both the channel quality and how well the chosen precoder matches the true channel, making it the ultimate metric a good PMI report is trying to protect."
+  },
+  {
+    "term": "SNR",
+    "short": "Signal-to-noise ratio — how strong the wanted signal is versus background noise.",
+    "long": "SNR (signal-to-noise ratio) measures how much stronger the wanted radio signal is compared to background noise, usually expressed in decibels (dB). Spectral efficiency and PMI selection quality are both evaluated across a range of SNR values, since the best precoder choice and its benefit can depend on how noisy the channel is."
+  },
+  {
+    "term": "overhead bits",
+    "short": "How many bits a PMI report costs to send.",
+    "long": "Overhead bits is the total size, in bits, of a PMI report — the sum of every reported field's bit-width. It is the direct cost side of the accuracy-versus-cost trade-off every codebook family navigates, and this project's figures repeatedly plot overhead bits against accuracy metrics like SGCS or spectral efficiency."
+  },
+  {
+    "term": "port",
+    "short": "One physical (or logical) antenna feed the base station can control.",
+    "long": "A port (CSI-RS port, or antenna port) is one independently controllable antenna feed at the base station. The total port count P determines the array's size and, combined with the number of horizontal/vertical positions and polarizations, sets how many precoder dimensions a codebook has to describe."
+  },
+  {
+    "term": "dual polarization",
+    "short": "Using two differently-oriented antenna elements per position to double capacity.",
+    "long": "Dual polarization means each antenna position actually contains two antenna elements oriented at right angles (typically +45 and -45 degrees), doubling the number of usable ports without doubling the physical array's footprint. Every codebook in this catalog treats the two polarizations as a shared beam direction with an independent phase and amplitude weight per polarization."
+  },
+  {
+    "term": "UPA",
+    "short": "Uniform planar array — a flat grid of antenna elements.",
+    "long": "UPA stands for uniform planar array: antenna elements arranged in an evenly spaced horizontal-by-vertical grid, described by dimensions N1 (horizontal) and N2 (vertical) per polarization. Every codebook in this catalog assumes a dual-polarized UPA (or several UPA panels, for multi-panel codebooks) as the underlying antenna geometry."
+  },
+  {
+    "term": "delay tap",
+    "short": "One compressed frequency-response component, standing in for a physical echo.",
+    "long": "A delay tap is one component of a compressed frequency-domain representation, corresponding physically to one distinguishable radio-wave echo (multipath delay). Instead of reporting a coefficient for every frequency subband, delay-domain codebooks (R16 onward) report just a handful of delay taps and let the receiver regenerate the full frequency response mathematically."
+  },
+  {
+    "term": "Doppler",
+    "short": "The rate-of-change in a channel caused by motion, compressed into a few shifts.",
+    "long": "Doppler shift describes how a moving phone's channel changes over time due to relative motion, the radio analogue of a siren's pitch changing as it passes. R18's Doppler-compressed codebook reports just one or two dominant Doppler shifts per layer, letting the base station predict the precoder for several future time slots from a single report instead of needing a fresh report every slot."
+  },
+  {
+    "term": "TRP/CJT",
+    "short": "Transmission/reception point; coherent joint transmission across several of them.",
+    "long": "A TRP (transmission/reception point) is one physical site — roughly a cell tower — that can transmit to or receive from a phone. CJT (coherent joint transmission) is a technique where several TRPs cooperate to serve one phone as if they were a single distributed antenna array, requiring the phone to report a precoder and inter-site phase alignment for every cooperating TRP."
+  },
+  {
+    "term": "port selection",
+    "short": "Reporting which already-formed antenna ports to use, instead of searching beam directions.",
+    "long": "Port selection is an alternative to DFT beam search: instead of describing an angular direction, the phone simply picks which of a set of already-formed (typically beamformed) antenna ports carries the strongest signal. It suits deployments where the CSI-RS reference signal is already concentrated onto a handful of useful ports, such as reciprocity-based TDD systems."
+  },
+  {
+    "term": "param combination",
+    "short": "A standardized preset bundling beam count, tap count, and coefficient budget.",
+    "long": "A parameter combination (paramCombination) is an RRC-signalled preset that bundles several codebook knobs together — typically the number of beams, the fraction of delay taps kept, and the overall coefficient budget — into a single configurable index. It is the main dial controlling a Type II-family codebook's accuracy-versus-overhead trade-off."
+  },
+  {
+    "term": "eigenvector",
+    "short": "The mathematically ideal, unquantized precoder direction.",
+    "long": "An eigenvector, in this context, is the mathematically ideal precoding direction derived directly from the measured channel's singular value decomposition, before any quantization or bit-budget constraint is applied. Every codebook's selection algorithm tries to approximate this ideal target as closely as its reporting format allows."
+  },
+  {
+    "term": "Monte-Carlo drop",
+    "short": "One randomly generated channel realization used to average out results.",
+    "long": "A Monte-Carlo drop is one randomly generated instance of a wireless channel (a specific set of propagation paths, delays, and angles) used to evaluate a codebook. Because real channels vary randomly, results are averaged over many independent drops to produce statistically meaningful performance figures rather than relying on a single lucky or unlucky channel."
+  },
+  {
+    "term": "RRC",
+    "short": "Radio resource control — the signaling layer that configures report settings.",
+    "long": "RRC (radio resource control) is the network-layer protocol that configures how a phone's radio connection behaves, including which codebook type, parameter combination, and reporting settings apply to its CSI feedback. This project treats RRC-configured parameters (like paramCombination or codebookMode) as inputs rather than modeling the signaling protocol itself."
+  },
+  {
+    "term": "QPSK",
+    "short": "A 4-point phase modulation, used here for simple co-phasing.",
+    "long": "QPSK (quadrature phase-shift keying) is a modulation scheme with four equally spaced phase points. In the Type I codebook family, QPSK is used not for data modulation but for co-phasing: a simple 2-bit rotation that aligns the two antenna polarizations so their signals combine constructively."
+  },
+  {
+    "term": "PSK",
+    "short": "Phase-shift keying — encoding a value as one of several phase points.",
+    "long": "PSK (phase-shift keying) encodes a value as one of several equally spaced points around a phase circle. Type II codebooks use PSK with varying resolution — 4, 8, or 16 points depending on the release and coefficient importance — to quantize each reported coefficient's phase."
+  },
+  {
+    "term": "codebookMode",
+    "short": "A switch trading a coarser wideband report for a finer per-subband one, or vice versa.",
+    "long": "codebookMode is a configuration switch, available in several Type I codebooks, that changes how the wideband and per-subband parts of the report share the work of describing direction. One mode reports a single wideband beam with cheap per-subband phase only; the other reports a coarser wideband beam but folds a finer per-subband refinement into the same field, trading bit placement for angular precision."
+  },
+  {
+    "term": "codebook subset restriction",
+    "short": "A network-configured bitmap forbidding certain beams or amplitude levels.",
+    "long": "Codebook subset restriction is a mechanism letting the network forbid certain beams, amplitude levels, or precoders from being reported at all, typically to avoid directions known to cause interference to neighboring cells. It is configured as a bitmap alongside the codebook's other parameters and enforced by the phone's selection algorithm."
+  },
+  {
+    "term": "bitmap",
+    "short": "A field marking which coefficients are actually nonzero and reported.",
+    "long": "A bitmap, in the R16-and-later Type II codebooks, is a field of one-bit flags marking exactly which beam/delay-tap (and, for R18, Doppler-shift) combinations carry a nonzero coefficient worth reporting. It replaces the earlier R15 convention of using a zero-amplitude quantization level, since later amplitude tables have no true zero entry."
+  },
+  {
+    "term": "strongest coefficient",
+    "short": "The largest-magnitude coefficient per layer, fixed by convention and not reported.",
+    "long": "The strongest coefficient is, per reported layer, the single largest-magnitude coefficient in the beam/tap combination. By standardized convention it is rotated to a fixed reference amplitude and zero phase and is therefore never actually transmitted in the report — only its position needs to be indicated, saving bits."
+  },
+  {
+    "term": "wideband",
+    "short": "Reported once for the entire configured frequency band.",
+    "long": "Wideband describes a PMI field that is reported just once, covering the entire configured reporting band, as opposed to being refreshed per subband. Wideband fields are cheap because they don't scale with N3, but they cannot track how the channel varies across frequency."
+  },
+  {
+    "term": "combinatorial index",
+    "short": "A single integer that names one specific subset chosen from a larger set.",
+    "long": "A combinatorial index is a compact way to encode which specific subset of items (beams, ports, or delay taps) was chosen out of a larger candidate set, using the combinatorial number system so that every possible subset maps to a unique integer. It is far cheaper than reporting each chosen item's position separately."
+  },
+  {
+    "term": "TDD",
+    "short": "Time-division duplex — uplink and downlink share the same frequency, at different times.",
+    "long": "TDD (time-division duplex) is a duplexing scheme where uplink and downlink transmissions share the same frequency channel but take turns in time. Because both directions use the same frequency, the base station can often infer downlink channel properties (like delay) directly from uplink measurements — a property called reciprocity that R17's port-selection codebook exploits to shrink its frequency-domain report."
+  },
+  {
+    "term": "CSI aging",
+    "short": "The accuracy loss from a channel report becoming stale before it is used.",
+    "long": "CSI aging is the degradation in a channel report's accuracy caused by the time gap between when the phone measures the channel and when the base station actually transmits using the reported precoder. On a moving phone the channel keeps changing during that gap, and R18's Doppler-compressed and predicted codebooks exist specifically to combat this by predicting ahead rather than only describing the present."
+  },
+  {
+    "term": "antenna array",
+    "short": "The physical grid of antenna elements at the base station.",
+    "long": "The antenna array is the physical arrangement of antenna elements at the base station, typically described by its horizontal and vertical element counts (N1, N2), its number of panels, and its dual polarization. Array size and geometry directly determine how many ports a codebook has to work with and how fine its beam grid can be."
+  },
+  {
+    "term": "SU-MIMO",
+    "short": "Single-user MIMO — multiple data streams to one user at once.",
+    "long": "SU-MIMO (single-user multiple-input multiple-output) is the use of multiple simultaneous spatial data streams (layers) to serve a single user, made possible by a sufficiently rich multi-antenna channel and an appropriately chosen rank. Most spectral efficiency figures in this project evaluate SU-MIMO performance for a chosen codebook and rank."
+  }
+]

@@ -209,7 +209,9 @@ R16_MATRIX = [
 @pytest.mark.parametrize("combo,rank,N3", R16_MATRIX)
 def test_every_r16_parameter_row_rank_and_n3_boundary(combo, rank, N3):
     antenna = AntennaConfig.standard(4, 4)
-    cbk = R16Type2Codebook(antenna, N3=N3, param_combination=combo)
+    # 5.2.2.2.5: combinations 7/8 require ranks 3-4 disallowed.
+    ri = [1, 1, 0, 0] if combo in (7, 8) else None
+    cbk = R16Type2Codebook(antenna, N3=N3, param_combination=combo, ri_restriction=ri)
     H = gaussian_channel(40000 + 100 * combo + 10 * rank + N3, 1, N3, rank, antenna.P)
     assert_valid_sample(cbk, H, rank)
 
@@ -219,7 +221,11 @@ R17_MATRIX = list(itertools.product(sorted(R17_PARAM_COMBOS), range(1, 5)))
 
 @pytest.mark.parametrize("combo,rank", R17_MATRIX)
 def test_every_r17_parameter_row_and_rank(combo, rank):
-    antenna = AntennaConfig.standard(4, 4)
+    # 5.2.2.2.7 bars combinations 7/8 at P_CSI-RS = 32, so those rows are
+    # exercised on the 16-port array instead.
+    antenna = (
+        AntennaConfig.standard(4, 2) if combo in (7, 8) else AntennaConfig.standard(4, 4)
+    )
     cbk = R17Type2Codebook(antenna, N3=8, param_combination=combo)
     H = gaussian_channel(50000 + 100 * combo + rank, 1, 8, rank, antenna.P)
     assert_valid_sample(cbk, H, rank)
@@ -240,8 +246,10 @@ def test_every_r18_parameter_row_rank_time_size_and_n3_boundary(
     combo, rank, N4, N3
 ):
     antenna = AntennaConfig.standard(4, 4)
+    # 5.2.2.2.10: combinations 8/9 require ranks 3-4 disallowed.
+    ri = [1, 1, 0, 0] if combo in (8, 9) else None
     cbk = R18Type2Codebook(
-        antenna, N3=N3, N4=N4, param_combination=combo
+        antenna, N3=N3, N4=N4, param_combination=combo, ri_restriction=ri
     )
     H = gaussian_channel(
         60000 + 1000 * combo + 100 * rank + 10 * N4 + N3,

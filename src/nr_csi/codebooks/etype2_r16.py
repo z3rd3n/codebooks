@@ -42,6 +42,44 @@ from .base import CodebookScheme
 
 
 @dataclass
+class R16AmplitudeRestriction:
+    """R16 codebook subset restriction B = B1 B2 (TS 38.214 5.2.2.2.5,
+    ``n1-n2-codebookSubsetRestriction-r16``).
+
+    Same wire format as the R15 ``TypeIIRestriction`` (B1: combinatorial index
+    selecting the 4 restricted vector groups out of O1*O2; B2: one 2-bit
+    codepoint per beam of each restricted group), but the codepoint bounds the
+    *average* coefficient amplitude of Table 5.2.2.2.5-6 instead of the
+    per-coefficient wideband amplitude:
+
+        sqrt( sum_f k3 * (p1 * p2_f)^2 / sum_f k3 ) <= gamma
+
+    per layer l, polarization p and beam i, with k3 the reported-coefficient
+    bitmap i_{1,7}.  Codepoint 0 prohibits the beam entirely.
+    """
+
+    beta1: int
+    b2: np.ndarray
+
+    #: Table 5.2.2.2.5-6 codepoint -> max allowed average amplitude gamma.
+    GAMMA = np.array([0.0, math.sqrt(1 / 4), math.sqrt(1 / 2), 1.0])
+
+    def restricted_groups(self, O1: int, O2: int) -> list[int]:
+        g, _, _ = cb.decode_restriction_groups(self.beta1, O1, O2)
+        return g
+
+    def gamma_caps(self, antenna: AntennaConfig, q1: int, q2: int) -> np.ndarray:
+        """Max allowed average amplitude per beam n = N1*n2 + n1 of group
+        (q1, q2); 1.0 (no cap) for unrestricted groups, 0.0 prohibits."""
+        n_beams = antenna.N1 * antenna.N2
+        g = self.restricted_groups(antenna.O1, antenna.O2)
+        group = antenna.O1 * q2 + q1
+        if group not in g:
+            return np.ones(n_beams)
+        return self.GAMMA[np.asarray(self.b2[g.index(group)], dtype=int)]
+
+
+@dataclass
 class R16Type2PMI:
     rank: int
     # spatial part: regular (q1,q2,i12) or port-selection (i11_ps)
@@ -114,16 +152,26 @@ class R16Type2Codebook(CodebookScheme):
         port_selection: bool = False,
         d: int = 1,
         combo: R16ParamCombo | None = None,
+        ri_restriction: np.ndarray | None = None,
+        restriction: R16AmplitudeRestriction | None = None,
     ) -> None:
         self.antenna = antenna
         self.N3 = N3
         if R not in (1, 2):
             raise ValueError("R must be 1 or 2")
         self.R = R
+        # typeII-RI-Restriction-r16 / typeII-PortSelectionRI-Restriction-r16:
+        # 4-bit bitmap [r0..r3]; r_i = 0 prohibits rank i+1.
+        if ri_restriction is None:
+            ri_restriction = np.ones(4, dtype=bool)
+        self.ri_restriction = np.asarray(ri_restriction, dtype=bool)
+        if self.ri_restriction.shape != (4,):
+            raise ValueError("typeII-RI-Restriction-r16 must have 4 bits [r0..r3]")
         # ``combo`` overrides the standardized paramCombination-r16 table for
         # generalized (L, p_v, beta) sweeps -- e.g. holding (L, M_v) fixed
         # while varying beta past the eight spec rows (used by the Qin Fig. 5
-        # reproduction).  Default behaviour is unchanged: look up the spec row.
+        # reproduction).  Default behaviour is unchanged: look up the spec row,
+        # enforcing the configuration bars of 5.2.2.2.5.
         if combo is not None:
             self.combo = combo
         elif port_selection:
@@ -137,6 +185,29 @@ class R16Type2Codebook(CodebookScheme):
                 )
             self.combo = R16_PS_PARAM_COMBOS[param_combination]
         else:
+            # Configuration bars of 5.2.2.2.5: "The UE is not expected to be
+            # configured with paramCombination-r16 equal to ...".
+            if antenna.P == 4 and param_combination >= 3:
+                raise ValueError(
+                    f"paramCombination-r16={param_combination} is not supported at "
+                    f"P_CSI-RS=4 (5.2.2.2.5 bars combinations 3-8)"
+                )
+            if param_combination in (7, 8):
+                if antenna.P < 32:
+                    raise ValueError(
+                        f"paramCombination-r16={param_combination} requires "
+                        f"P_CSI-RS >= 32 (got {antenna.P})"
+                    )
+                if R == 2:
+                    raise ValueError(
+                        f"paramCombination-r16={param_combination} is not supported "
+                        f"with R=2"
+                    )
+                if bool(self.ri_restriction[2] or self.ri_restriction[3]):
+                    raise ValueError(
+                        f"paramCombination-r16={param_combination} requires ranks 3-4 "
+                        f"disallowed (typeII-RI-Restriction-r16 with r_i=0 for i>1)"
+                    )
             self.combo = R16_PARAM_COMBOS[param_combination]
         self.L = self.combo.L
         self.port_selection = port_selection
@@ -151,6 +222,14 @@ class R16Type2Codebook(CodebookScheme):
                 f"N1*N2={antenna.n_ports_per_pol} beams"
             )
         self.d = d
+        if restriction is not None:
+            if port_selection:
+                raise ValueError("subset restriction applies to the regular codebook only")
+            if not 0 <= restriction.beta1 < comb(antenna.O1 * antenna.O2, 4):
+                raise ValueError("beta1 out of range")
+            if np.asarray(restriction.b2).shape != (4, antenna.N1 * antenna.N2):
+                raise ValueError(f"B2 must be (4, {antenna.N1 * antenna.N2}) codepoints")
+        self.restriction = restriction
         if N3 < 1:
             raise ValueError("N3 must be positive")
         for v in (1, 2, 3, 4):  # fail at construction, not first use
@@ -215,6 +294,13 @@ class R16Type2Codebook(CodebookScheme):
     def select(self, H: np.ndarray, rank: int = 1) -> R16Type2PMI:
         if not 1 <= rank <= 4:
             raise ValueError("R16 eType II supports ranks 1-4")
+        if not self.ri_restriction[rank - 1]:
+            name = (
+                "typeII-PortSelectionRI-Restriction-r16"
+                if self.port_selection
+                else "typeII-RI-Restriction-r16"
+            )
+            raise ValueError(f"rank {rank} prohibited by {name} (r{rank - 1}=0)")
         H = np.asarray(H)[-1]
         if H.shape[0] != self.N3:
             raise ValueError(f"channel has {H.shape[0]} frequency units, expected {self.N3}")
@@ -225,9 +311,15 @@ class R16Type2Codebook(CodebookScheme):
         if self.port_selection:
             pmi.i11_ps = _spatial.select_ps_initial(self.antenna, targets, self.L, self.d)
         else:
+            allowed = None
+            if self.restriction is not None:
+                allowed = lambda q1, q2: self.restriction.gamma_caps(
+                    self.antenna, q1, q2
+                ) > 0
             pmi.q1, pmi.q2, pmi.i12 = _spatial.select_group_and_beams(
-                self.antenna, targets, self.L
+                self.antenna, targets, self.L, allowed=allowed
             )
+        gamma_caps = self._selected_gamma_caps(pmi)
         B = self._basis(pmi)
         coeff = _spatial.ls_coefficients(B, targets, self._scale())  # (v, N3, 2L)
 
@@ -260,7 +352,15 @@ class R16Type2Codebook(CodebookScheme):
             if i15 is not None and m_init_common is None:
                 m_init_common = i15 if i15 == 0 else i15 - 2 * Mv
             Ct = Ctap[:, taps]  # (2L, Mv)
-            i_star = int(np.argmax(np.abs(Ct[:, 0])))
+            # the strongest coefficient has fixed p1 = p2 = 1, so it must sit
+            # on an amplitude-unrestricted beam to keep the restriction honest
+            if gamma_caps is not None:
+                eligible = np.where(gamma_caps >= 1.0, np.abs(Ct[:, 0]), -np.inf)
+                i_star = int(np.argmax(eligible))
+                if not np.isfinite(eligible[i_star]):
+                    i_star = int(np.argmax(np.abs(Ct[:, 0])))
+            else:
+                i_star = int(np.argmax(np.abs(Ct[:, 0])))
             stars.append(i_star)
             Ct = Ct / Ct[i_star, 0]
             # per-layer bitmap: K0 strongest coefficients (order-independent
@@ -286,7 +386,6 @@ class R16Type2Codebook(CodebookScheme):
             Ct = kept[li]
             bm = pmi.i17[li].T  # (2L, Mv)
             i_star = stars[li]
-            pmi.i18.append(encode_i18(pmi.i17[li], i_star, rank))
             p_star = i_star // self.L
             mags = np.abs(Ct)
             for pol in (0, 1):
@@ -307,7 +406,62 @@ class R16Type2Codebook(CodebookScheme):
             # strongest coefficient conventions (not reported, fixed values)
             pmi.k2[li, 0, i_star] = 7
             pmi.c[li, 0, i_star] = 0
+        if gamma_caps is not None:
+            self._enforce_amplitude_restriction(pmi, gamma_caps, stars)
+        # i18 is encoded last: the rank-1 form indexes the *nonzero* bitmap
+        # bits, so it must reflect any entries dropped by the restriction.
+        for li in range(rank):
+            pmi.i18.append(encode_i18(pmi.i17[li], stars[li], rank))
         return pmi
+
+    def _selected_gamma_caps(self, pmi: R16Type2PMI) -> np.ndarray | None:
+        """Per-coefficient max average amplitude (2L,) for the selected beams,
+        or None when unrestricted (Table 5.2.2.2.5-6)."""
+        if self.restriction is None or self.port_selection:
+            return None
+        n1, n2 = cb.decode_beam_combination(pmi.i12, self.antenna.N1, self.antenna.N2, self.L)
+        caps_group = self.restriction.gamma_caps(self.antenna, pmi.q1, pmi.q2)
+        caps = np.array([caps_group[self.antenna.N1 * b + a] for a, b in zip(n1, n2)])
+        return np.concatenate([caps, caps])  # both polarizations
+
+    def _enforce_amplitude_restriction(
+        self, pmi: R16Type2PMI, caps: np.ndarray, stars: list[int]
+    ) -> None:
+        """Reduce differential amplitudes until each restricted beam meets
+        sqrt(sum_f k3 (p1 p2)^2 / sum_f k3) <= gamma (5.2.2.2.5).
+
+        The greedy k2 decrement always terminates: allowed beams have
+        gamma >= 1/2 while p1 * min(p2) <= 1/(8 sqrt(2)).  The strongest
+        coefficient (fixed k2 = 7, not reported) is never touched; ``select``
+        places it on an unrestricted beam whenever one exists.
+        """
+        for li in range(pmi.rank):
+            p1 = qt.R16_REF_AMP[pmi.k1[li]]  # (2,)
+            for i in range(2 * self.L):
+                gamma = caps[i]
+                if gamma >= 1.0:
+                    continue
+                star_f = 0 if i == stars[li] else None
+                while True:
+                    k3 = pmi.i17[li][:, i]  # (Mv,)
+                    if not k3.any():
+                        break
+                    amps = p1[i // self.L] * qt.R16_DIFF_AMP[pmi.k2[li][:, i]]
+                    avg = math.sqrt(float(np.mean(amps[k3] ** 2)))
+                    if avg <= gamma + 1e-12:
+                        break
+                    k2_col = np.where(k3, pmi.k2[li][:, i], -1)
+                    if star_f is not None:
+                        k2_col[star_f] = -1  # never reduce the strongest coefficient
+                    f = int(np.argmax(k2_col))
+                    if k2_col[f] > 0:
+                        pmi.k2[li, f, i] -= 1
+                    elif k2_col[f] == 0:  # already at the floor: drop the entry
+                        pmi.i17[li][f, i] = False
+                        pmi.k2[li, f, i] = 0
+                        pmi.c[li, f, i] = 0
+                    else:  # only the strongest coefficient remains
+                        break
 
     def _select_taps(
         self, tap_energy: np.ndarray, Mv: int, m_initial: int | None = None
@@ -355,8 +509,14 @@ class R16Type2Codebook(CodebookScheme):
         else:
             bits["i16"] = v * math.ceil(math.log2(comb(self.N3 - 1, Mv - 1)))
         bits["i17"] = v * 2 * L * Mv
-        bits["i18"] = v * math.ceil(math.log2(2 * L))
         K_nz = int(pmi.i17.sum())
+        # TS 38.212 Table 6.3.2.1.2-1A: rank 1 spends ceil(log2(K^NZ)) bits on
+        # the strongest-coefficient indicator; ranks 2-4 spend ceil(log2(2L))
+        # per layer.
+        if v == 1:
+            bits["i18"] = math.ceil(math.log2(K_nz)) if K_nz > 1 else 0
+        else:
+            bits["i18"] = v * math.ceil(math.log2(2 * L))
         bits["i23"] = 4 * v
         bits["i24"] = 3 * (K_nz - v)
         bits["i25"] = 4 * (K_nz - v)

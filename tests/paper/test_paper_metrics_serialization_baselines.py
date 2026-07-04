@@ -114,7 +114,9 @@ def test_r16_regular_golden_bitstream():
         k2=np.array([[[7, 4, 0, 0]]]),
         c=np.array([[[0, 6, 0, 0]]]),
     )
-    assert pack(cbk, pmi) == "0111000001011000110"
+    # i11 "01", i12/i16 zero-width, i17 "1100", i18 "0" (rank 1: ceil(log2
+    # K^NZ) = 1 bit, TS 38.212 Table 6.3.2.1.2-1A), k1 "0101", k2/c "1000110"
+    assert pack(cbk, pmi) == "011100001011000110"
 
 
 def test_r17_conditional_fields_golden_bitstream():
@@ -160,7 +162,8 @@ def test_r18_n4_two_zero_width_shift_golden_bitstream():
     pmi.k2[0, 0, 0, 0] = 7
     pmi.k2[0, 0, 0, 1] = 2
     pmi.c[0, 0, 0, 1] = 13
-    expected = "11" + "11000000" + "000" + "0100" + "0101101"
+    # rank-1 i18 is ceil(log2 K^NZ) = 1 bit (TS 38.212 Table 6.3.2.1.2-1C)
+    expected = "11" + "11000000" + "0" + "0100" + "0101101"
     assert pack(cbk, pmi) == expected
     assert len(expected) == cbk.total_overhead_bits(pmi)
 

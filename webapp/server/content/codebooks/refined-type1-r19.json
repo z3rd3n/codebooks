@@ -1,0 +1,55 @@
+{
+  "id": "refined-type1-r19",
+  "name": "Refined Type I Single-Panel Codebook",
+  "shortName": "Refined Type I",
+  "release": "R19",
+  "specClause": "TS 38.214 §5.2.2.2.1a",
+  "docFile": "07-refined-r19.md",
+  "position": 10,
+  "lineage": {"parent": "type1-sp", "adds": "independently selected companion beams for very large arrays (48/64/128 ports), instead of one rigid fixed offset"},
+  "tagline": "Type I's single-beam idea, scaled to arrays with hundreds of virtual beam directions, with genuinely independent companion beams at high rank instead of one rigid template.",
+  "overview": [
+    "Release 15 Type I was designed when a beam grid of a few dozen directions was already generous. Release 19 targets **48, 64, and 128-port arrays**, where the oversampled beam grid can hold over a thousand directions — a much finer compass. At low rank (1-4), Refined Type I keeps R15's familiar recipe: one base beam plus, for ranks 2-4, a single companion beam at a fixed offset from a small table. The genuine innovation shows up at **rank 5-8**, where R15 forced every companion beam onto a rigid, pre-defined offset pattern; Refined Type I instead lets the UE (user equipment) pick each companion **independently**, subject only to an orthogonality constraint the standard requires for the columns to stay well-separated.",
+    "This codebook offers two selectable **codebookModes**, and this entry documents **modeA**: the base beam and its companions are chosen the same way as R15 Type I (a fixed-offset table at low rank), but with the high-rank companion selection freed up as described above. A sibling **modeB** exists in the same class (selectable via the `mode` parameter) that instead selects one beam *per layer* inside a shared orthogonal group — a different, per-layer-freedom philosophy documented in the underlying chapter. Both modes are much closer, structurally, to a beam-search than to R15's rigid multi-layer templates.",
+    "The UE-side selection algorithm reflects this hybrid nature: it borrows Type II's **energy-projection** approach to find the most promising base beam and companions (project the target eigenvectors onto the oversampled grid and look for the most energetic candidates), then falls back to Type I's **rate-maximizing** search for the per-subband co-phasing. At high rank the companion search greedily builds a set of mutually orthogonal beams — trying both of the two possible orthogonality axes and keeping whichever set captures more energy.",
+    "The price of this freedom is a handful of extra companion-index bits at high rank (naming each independent companion's position costs more than naming a single fixed-table entry), but the accuracy payoff on very large arrays is substantial: a fixed low-rank offset table becomes an increasingly poor approximation as the array — and its beam grid — grows, which is exactly the regime Release 19 targets."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel on a very large array", "body": "The phone estimates the channel via CSI-RS (channel state information reference signal) across a 48, 64, or 128-port array, one of Release 19's dedicated large-array geometries."},
+    {"title": "UE finds the base beam by energy projection", "body": "Following the Type II-style approach, the UE projects phase-aligned eigenvector targets onto the full oversampled beam grid and picks the most energetic direction as the base beam."},
+    {"title": "UE selects companion beams (fixed offset at low rank, independent at high rank)", "body": "For ranks 2-4, one companion is chosen from a small fixed-offset table, exactly as R15 Type I. For ranks 5-8, companions are chosen independently and greedily, subject to a mutual-orthogonality requirement the standard imposes."},
+    {"title": "UE picks per-subband co-phasing by rate", "body": "For each frequency unit, the co-phasing index is chosen by maximizing the achievable data rate, mirroring R15 Type I's rate-based (not energy-based) per-subband search."},
+    {"title": "Report travels over the uplink", "body": "The base beam, companion selector(s), and per-subband co-phasing form the PMI (precoding matrix indicator) — larger than R15 Type I's report only at high rank, where the independent companions cost extra bits."},
+    {"title": "gNB reconstructs and transmits", "body": "The base station (gNB) rebuilds the beam set and applies the standardized column patterns (closely related to R15 Type I's) to reconstruct the precoder, then transmits."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "The horizontal position of the base beam on the large oversampled grid.", "detail": "Same role as R15 Type I's i11, but over a much larger grid (up to 64 positions per dimension) reflecting the bigger array."},
+    {"field": "i12", "plain": "The vertical position of the base beam.", "detail": "Same role as R15 Type I's i12, sized to the array's vertical beam-grid resolution."},
+    {"field": "i13", "plain": "At rank 2-4, which fixed offset the companion beam uses; at rank 5-8, which orthogonality axis the independent companions use.", "detail": "A 2-bit fixed-offset selector at low rank (same style as R15); a 1-bit axis selector at high rank, paired with the per-companion indices below."},
+    {"field": "i112", "plain": "At rank 5-8, each independent companion beam's horizontal position.", "detail": "One index per companion (2 companions at rank 5-6, 3 at rank 7-8), the genuinely new field this codebook introduces."},
+    {"field": "i122", "plain": "At rank 5-8, each independent companion beam's vertical position.", "detail": "Paired with i112, reported only when the vertical grid has more than one position."},
+    {"field": "i2", "plain": "Per-subband co-phasing between the two antenna polarizations.", "detail": "Same role as R15 Type I: 2-bit at rank 1, 1-bit otherwise, refreshed every frequency unit."}
+  ],
+  "parametersExplained": [
+    {"key": "mode", "plain": "modeA keeps R15-style fixed-offset companions at low rank with independent companions at high rank; modeB instead selects one beam per layer inside a shared group.", "guidance": "Use modeA to see the direct evolution of R15 Type I's structure; use modeB to explore the alternative per-layer-freedom design."},
+    {"key": "rank", "plain": "How many simultaneous data streams (1-8) to describe.", "guidance": "The interesting behavior is at rank 5-8, where independent companion selection replaces R15's rigid fixed patterns — try comparing rank 2 (fixed offset) against rank 5 (independent companions)."}
+  ],
+  "strengths": [
+    "Scales Type I's cheap single-beam philosophy to very large 48/64/128-port arrays.",
+    "High-rank companion beams are chosen independently rather than forced onto a rigid offset grid, closing an accuracy gap R15 left on the table for large arrays.",
+    "Reuses R15's proven column-pattern reconstruction and per-subband co-phasing at low rank.",
+    "Still dramatically cheaper than any Type II-family report."
+  ],
+  "limitations": [
+    "Only defined for the fixed set of Release-19 large-array geometries (48/64/128 ports).",
+    "High-rank companion indices add real bits versus R15's single fixed-table entry.",
+    "Like R15 Type I, still reports only a direction (or a few independent directions), not a weighted combination — coarser than any Type II codebook.",
+    "If an array lacks enough mutually orthogonal positions for the required high-rank companion count, that orthogonality axis is simply skipped during selection."
+  ],
+  "whenToUse": "Use Refined Type I when modeling very large arrays (48+ ports) at low feedback cost, especially at high rank where its independent companion-beam selection meaningfully improves on R15 Type I's rigid template.",
+  "mathHighlight": {
+    "caption": "At high rank, each independent companion beam is parametrized by its own reported index along one of two possible orthogonal axes, rather than a single fixed table entry.",
+    "latex": "l^{(j)} = o_1\\, i_{1,1,j} + k_1,\\qquad m^{(j)} = o_2\\, i_{1,2,j} + k_2"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "DFT beam", "oversampling", "rank/layer", "codebookMode", "port"]
+}

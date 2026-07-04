@@ -66,11 +66,14 @@ def r16_bits(
 ) -> dict[str, int]:
     """R16 Enhanced Type II regular codebook overhead (one PMI report)."""
     a = antenna
+    # TS 38.212 Table 6.3.2.1.2-1A: the strongest-coefficient indicator is
+    # ceil(log2(K^NZ)) bits at rank 1, ceil(log2(2L)) per layer at ranks 2-4.
+    i18 = math.ceil(math.log2(K_nz)) if v == 1 else v * math.ceil(math.log2(2 * L))
     bits = {
         "i11": math.ceil(math.log2(a.O1 * a.O2)),
         "i12": math.ceil(math.log2(comb(a.N1 * a.N2, L))),
         "i17": v * 2 * L * Mv,
-        "i18": v * math.ceil(math.log2(2 * L)),
+        "i18": i18,
         "i23": 4 * v,
         "i24": 3 * (K_nz - v),
         "i25": 4 * (K_nz - v),
@@ -96,7 +99,9 @@ def r18_bits(
     """R18 Doppler codebook overhead (one report covers N4 intervals)."""
     bits = r16_bits(antenna, L, v, N3, Mv, K_nz)
     bits["i17"] = v * 2 * L * Mv * Q
-    bits["i18"] = v * math.ceil(math.log2(2 * L * Q))
+    # TS 38.212 Table 6.3.2.1.2-1C (rank-1 width is K^NZ-based, as in r16_bits)
+    if v > 1:
+        bits["i18"] = v * math.ceil(math.log2(2 * L * Q))
     if N4 > 1:
         bits["i110"] = v * math.ceil(math.log2(N4 - 1))
     return bits

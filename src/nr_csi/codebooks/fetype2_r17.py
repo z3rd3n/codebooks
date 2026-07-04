@@ -56,9 +56,39 @@ class R17Type2Codebook(CodebookScheme):
         N3: int,
         param_combination: int = 7,
         N_window: int = 4,
+        ri_restriction: np.ndarray | None = None,
     ) -> None:
         self.antenna = antenna
         self.N3 = N3
+        # typeII-PortSelectionRI-Restriction-r17: 4-bit bitmap [r0..r3].
+        if ri_restriction is None:
+            ri_restriction = np.ones(4, dtype=bool)
+        self.ri_restriction = np.asarray(ri_restriction, dtype=bool)
+        if self.ri_restriction.shape != (4,):
+            raise ValueError(
+                "typeII-PortSelectionRI-Restriction-r17 must have 4 bits [r0..r3]"
+            )
+        # Configuration bars of 5.2.2.2.7: "The UE is not expected to be
+        # configured with paramCombination-r17 equal to ...".
+        if param_combination in (1, 6) and antenna.P in (4, 12):
+            raise ValueError(
+                f"paramCombination-r17={param_combination} is not supported at "
+                f"P_CSI-RS={antenna.P} (5.2.2.2.7 bars combinations 1 and 6)"
+            )
+        if param_combination in (7, 8) and antenna.P == 32:
+            raise ValueError(
+                f"paramCombination-r17={param_combination} is not supported at "
+                f"P_CSI-RS=32"
+            )
+        if (
+            param_combination == 5
+            and antenna.P == 4
+            and bool(self.ri_restriction[2] or self.ri_restriction[3])
+        ):
+            raise ValueError(
+                "paramCombination-r17=5 at P_CSI-RS=4 requires ranks 3-4 disallowed "
+                "(typeII-PortSelectionRI-Restriction-r17 with r_i=0 for i>1)"
+            )
         self.combo = R17_PARAM_COMBOS[param_combination]
         self.M = self.combo.M
         self.alpha = self.combo.alpha
@@ -130,6 +160,11 @@ class R17Type2Codebook(CodebookScheme):
     def select(self, H: np.ndarray, rank: int = 1) -> R17Type2PMI:
         if not 1 <= rank <= 4:
             raise ValueError("R17 FeType II supports ranks 1-4")
+        if not self.ri_restriction[rank - 1]:
+            raise ValueError(
+                f"rank {rank} prohibited by typeII-PortSelectionRI-Restriction-r17 "
+                f"(r{rank - 1}=0)"
+            )
         H = np.asarray(H)[-1]
         if H.shape[0] != self.N3:
             raise ValueError(f"channel has {H.shape[0]} frequency units, expected {self.N3}")
@@ -242,9 +277,12 @@ class R17Type2Codebook(CodebookScheme):
             bits["i12"] = math.ceil(math.log2(comb(self.antenna.P // 2, self.L)))
         if self.M == 2 and min(self.N_window, self.N3) > 2:
             bits["i16"] = math.ceil(math.log2(self.N_window - 1))
-        bits["i17"] = v * self.K1 * self.M
-        bits["i18"] = v * math.ceil(math.log2(self.K1 * self.M))
         K_nz = int(pmi.i17.sum())
+        # TS 38.214 5.2.2.2.7: i_{1,7,l} is not reported when v <= 2 and
+        # K^NZ = K1*M*v (every coefficient nonzero, only reachable at beta=1).
+        if not (v <= 2 and K_nz == self.K1 * self.M * v):
+            bits["i17"] = v * self.K1 * self.M
+        bits["i18"] = v * math.ceil(math.log2(self.K1 * self.M))
         bits["i23"] = 4 * v
         bits["i24"] = 3 * (K_nz - v)
         bits["i25"] = 4 * (K_nz - v)

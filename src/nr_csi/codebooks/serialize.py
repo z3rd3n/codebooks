@@ -142,6 +142,24 @@ def unpack_type1_multipanel(cbk, bits: str, rank: int):
     return Type1MPPMI(rank, cbk.mode, i11, i12, i14, i2, i13)
 
 
+def pack_type1_2port(cbk, pmi) -> str:
+    w = BitWriter()
+    width = 2 if pmi.rank == 1 else 1
+    for t in range(cbk.N3):
+        w.write(int(pmi.i2[t]), width)
+    return w.getvalue()
+
+
+def unpack_type1_2port(cbk, bits: str, rank: int):
+    from .type1 import TwoPortType1PMI
+
+    r = BitReader(bits)
+    width = 2 if rank == 1 else 1
+    i2 = np.array([r.read(width) for _ in range(cbk.N3)])
+    _require_done(r)
+    return TwoPortType1PMI(rank=rank, i2=i2)
+
+
 # ---------------------------------------------------------------------------
 # R15 Type II
 # ---------------------------------------------------------------------------
@@ -268,6 +286,15 @@ def _tap_width(cbk, Mv: int) -> int:
     return _w(comb(cbk.N3 - 1, Mv - 1))
 
 
+def _sci_width(i17: np.ndarray, rank: int, n_states: int) -> int:
+    """Strongest-coefficient-indicator width, TS 38.212 Tables 6.3.2.1.2-1A/-1C:
+    ceil(log2(K^NZ)) for rank 1, ceil(log2(n_states)) per layer otherwise.
+    The bitmap precedes i_{1,8} in the stream, so K^NZ is known on decode."""
+    if rank == 1:
+        return _w(int(i17.sum()))
+    return _w(n_states)
+
+
 # ---------------------------------------------------------------------------
 # R16 eType II
 # ---------------------------------------------------------------------------
@@ -291,7 +318,7 @@ def pack_r16(cbk, pmi) -> str:
         for b in pmi.i17[li].reshape(-1):
             w.write(int(b), 1)
     for li in range(pmi.rank):
-        w.write(pmi.i18[li], _w(L2))
+        w.write(pmi.i18[li], _sci_width(pmi.i17, pmi.rank, L2))
     star_flat = []
     for li in range(pmi.rank):
         i_star = decode_i18(pmi.i18[li], pmi.i17[li], pmi.rank)
@@ -320,7 +347,7 @@ def unpack_r16(cbk, bits: str, rank: int):
     for li in range(rank):
         flat = np.array([r.read(1) for _ in range(Mv * L2)], dtype=bool)
         pmi.i17[li] = flat.reshape(Mv, L2)
-    pmi.i18 = [r.read(_w(L2)) for _ in range(rank)]
+    pmi.i18 = [r.read(_sci_width(pmi.i17, rank, L2)) for _ in range(rank)]
     star_flat, p_stars = [], []
     for li in range(rank):
         i_star = decode_i18(pmi.i18[li], pmi.i17[li], rank)
@@ -335,15 +362,22 @@ def unpack_r16(cbk, bits: str, rank: int):
 # R17 FeType II
 # ---------------------------------------------------------------------------
 
+def _r17_bitmap_omitted(i17: np.ndarray, rank: int) -> bool:
+    """TS 38.214 5.2.2.2.7: i_{1,7,l} is not reported when v <= 2 and
+    K^NZ = K1*M*v, i.e. when every bitmap bit is 1 (reachable only at beta=1)."""
+    return rank <= 2 and bool(i17.all())
+
+
 def pack_r17(cbk, pmi) -> str:
     w = BitWriter()
     if cbk.alpha < 1:
         w.write(pmi.i12, _w(comb(cbk.antenna.P // 2, cbk.L)))
     if cbk.M == 2 and min(cbk.N_window, cbk.N3) > 2:
         w.write(pmi.i16, _w(cbk.N_window - 1))
-    for li in range(pmi.rank):
-        for b in pmi.i17[li].reshape(-1):
-            w.write(int(b), 1)
+    if not _r17_bitmap_omitted(pmi.i17, pmi.rank):
+        for li in range(pmi.rank):
+            for b in pmi.i17[li].reshape(-1):
+                w.write(int(b), 1)
     for li in range(pmi.rank):
         w.write(pmi.i18[li], _w(cbk.K1 * cbk.M))
     star_flat = []
@@ -363,10 +397,23 @@ def unpack_r17(cbk, bits: str, rank: int):
         pmi.i12 = r.read(_w(comb(cbk.antenna.P // 2, cbk.L)))
     if cbk.M == 2 and min(cbk.N_window, cbk.N3) > 2:
         pmi.i16 = r.read(_w(cbk.N_window - 1))
-    pmi.i17 = np.zeros((rank, cbk.M, cbk.K1), dtype=bool)
-    for li in range(rank):
-        flat = np.array([r.read(1) for _ in range(cbk.M * cbk.K1)], dtype=bool)
-        pmi.i17[li] = flat.reshape(cbk.M, cbk.K1)
+    # An omitted bitmap (v <= 2, all coefficients nonzero) is detected from the
+    # remaining length: the two parses differ by K1*M*v - 7*(K1*M*v - K_nz)
+    # bits, which is zero only if 7 | K1*M*v -- impossible, since K1, M and v
+    # only carry prime factors 2 and 3 for every valid configuration.
+    n_bitmap = rank * cbk.M * cbk.K1
+    expected_omitted = (
+        rank * _w(cbk.K1 * cbk.M)  # i18
+        + rank * 4  # i23
+        + (n_bitmap - rank) * (3 + _w(cbk.N_PSK))  # i24 + i25, all-nonzero
+    )
+    if rank <= 2 and len(bits) - r.pos == expected_omitted:
+        pmi.i17 = np.ones((rank, cbk.M, cbk.K1), dtype=bool)
+    else:
+        pmi.i17 = np.zeros((rank, cbk.M, cbk.K1), dtype=bool)
+        for li in range(rank):
+            flat = np.array([r.read(1) for _ in range(cbk.M * cbk.K1)], dtype=bool)
+            pmi.i17[li] = flat.reshape(cbk.M, cbk.K1)
     pmi.i18 = [r.read(_w(cbk.K1 * cbk.M)) for _ in range(rank)]
     star_flat, p_stars = [], []
     for li in range(rank):
@@ -398,7 +445,7 @@ def pack_r18(cbk, pmi) -> str:
         for b in pmi.i17[li].reshape(-1):
             w.write(int(b), 1)
     for li in range(pmi.rank):
-        w.write(pmi.i18[li], _w(L2 * Q))
+        w.write(pmi.i18[li], _sci_width(pmi.i17, pmi.rank, L2 * Q))
     if cbk.N4 > 1:
         for li in range(pmi.rank):
             w.write(pmi.i110[li], _w(cbk.N4 - 1))
@@ -427,7 +474,7 @@ def unpack_r18(cbk, bits: str, rank: int):
     for li in range(rank):
         flat = np.array([r.read(1) for _ in range(Q * Mv * L2)], dtype=bool)
         pmi.i17[li] = flat.reshape(Q, Mv, L2)
-    pmi.i18 = [r.read(_w(L2 * Q)) for _ in range(rank)]
+    pmi.i18 = [r.read(_sci_width(pmi.i17, rank, L2 * Q)) for _ in range(rank)]
     if cbk.N4 > 1:
         pmi.i110 = [r.read(_w(cbk.N4 - 1)) for _ in range(rank)]
     star_flat, p_stars = [], []
@@ -448,10 +495,12 @@ def pack(cbk, pmi) -> str:
     from .etype2_r16 import R16Type2Codebook
     from .etype2_r18 import R18Type2Codebook
     from .fetype2_r17 import R17Type2Codebook
-    from .type1 import Type1Codebook
+    from .type1 import TwoPortType1Codebook, Type1Codebook
     from .type1_multipanel import Type1MultiPanelCodebook
     from .type2_r15 import R15Type2Codebook
 
+    if isinstance(cbk, TwoPortType1Codebook):
+        return pack_type1_2port(cbk, pmi)
     if isinstance(cbk, Type1Codebook):
         return pack_type1(cbk, pmi)
     if isinstance(cbk, Type1MultiPanelCodebook):
@@ -471,10 +520,12 @@ def unpack(cbk, bits: str, rank: int):
     from .etype2_r16 import R16Type2Codebook
     from .etype2_r18 import R18Type2Codebook
     from .fetype2_r17 import R17Type2Codebook
-    from .type1 import Type1Codebook
+    from .type1 import TwoPortType1Codebook, Type1Codebook
     from .type1_multipanel import Type1MultiPanelCodebook
     from .type2_r15 import R15Type2Codebook
 
+    if isinstance(cbk, TwoPortType1Codebook):
+        return unpack_type1_2port(cbk, bits, rank)
     if isinstance(cbk, Type1Codebook):
         return unpack_type1(cbk, bits, rank)
     if isinstance(cbk, Type1MultiPanelCodebook):

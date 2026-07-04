@@ -6,26 +6,24 @@
   Type II family: §5.2.2.2.5 (R16 Enhanced Type II), §5.2.2.2.7 (R17 further-
   enhanced port selection), §5.2.2.2.10 (R18 predicted Type II).
 * **Code:** [refined_type1_r19.py](../../src/nr_csi/codebooks/refined_type1_r19.py)
-  — class `RefinedType1SinglePanelCodebook`;
+  — class `RefinedType1SinglePanelCodebook` (`modeA` and `modeB`);
+  [refined_type1mp_r19.py](../../src/nr_csi/codebooks/refined_type1mp_r19.py)
+  — class `RefinedType1MultiPanelCodebook`;
   [refined_r19.py](../../src/nr_csi/codebooks/refined_r19.py) — classes
   `RefinedEType2Codebook`, `RefinedFeType2PortSelectionCodebook`,
   `RefinedPredictedEType2Codebook`; config in
-  [config.py](../../src/nr_csi/config.py) — `SUPPORTED_N1N2_R19`.
-* **Ranks:** 1–8 (refined Type I single-panel, `modeA`); 1–4 (refined Type II).
+  [config.py](../../src/nr_csi/config.py) — `SUPPORTED_N1N2_R19`,
+  `SUPPORTED_NG_N1N2_R19`.
+* **Ranks:** 1–8 (refined Type I single-panel, both modes); 1–4 (refined Type I
+  multi-panel and refined Type II).
 * **Prereq:** the corresponding base chapters
   ([1](01-type1-single-panel.md), [4](04-etype2-r16.md),
   [5](05-fetype2-r17.md), [6](06-etype2-doppler-r18.md)).
 
-> ⚠️ **Spec-source note.** The bundled spec markdown
-> [specs/38214-i00.md](../../specs/38214-i00.md) is **TS 38.214 Release-18
-> ("i00")**. It does **not** contain the Release-19 *refined* clauses
-> (5.2.2.2.1a / 5.2.2.2.2a / 5.2.2.2.5a / 5.2.2.2.9a / 5.2.2.2.11a). Everything
-> about the Release-19 *structure* in this chapter is documented from the code,
-> the module docstrings, and the Release-19 standard (v19.3.0 / "j30") — it is
-> **not** cross-checked line-by-line against the bundled markdown. Where this
-> chapter cites a base clause that **is** in the file (5.2.2.2.5 at line 9794,
-> 5.2.2.2.7 at line 10745, 5.2.2.2.10 at line 12411, the R15 Type I base
-> 5.2.2.2.1 at line 8918), those line anchors are real.
+> **Spec source.** The bundled spec markdown is now **TS 38.214 v19.4.0**
+> ([specs/38.214-v19.4.0.md](../../specs/38.214-v19.4.0.md)), which contains
+> all the Release-19 refined clauses (5.2.2.2.1a at line 7354, 5.2.2.2.2a at
+> 8949, 5.2.2.2.5a at 10600, 5.2.2.2.9a at 12230, 5.2.2.2.11a at 12543).
 
 Release 19 targets **very large arrays** — 48, 64, and 128 CSI-RS ports, built by
 aggregating several CSI-RS resources, with geometries in Table 5.2.2.2.1a-1
@@ -36,8 +34,9 @@ codebook:
    just on the larger geometries with a few extra configuration guards. Implemented
    as thin subclasses.
 2. **Refined Type I** (§5.2.2.2.1a single-panel, §5.2.2.2.2a multi-panel) — a
-   *structurally new* beam selection (especially for high rank). Only the
-   single-panel `modeA` variant is implemented; see the not-implemented flags
+   *structurally new* beam selection (especially for high rank). Both
+   single-panel modes (`modeA`/`modeB`) and the multi-panel class are
+   implemented; see the sections
    below.
 
 ---
@@ -343,15 +342,41 @@ offsets would. Worked example for $(8,4)$ ($G_1{=}32,G_2{=}16$): `i11`=5 bits,
 `i12`=4 bits; rank-1 `i2`=$2N_3$; rank-5 adds 1-bit `i13` plus the companion
 indices.
 
-### Not implemented in this codebase
+### codebookMode 'modeB' (§5.2.2.2.1a)
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** §5.2.2.2.1a
-> `codebookMode 'modeB'` (the alternative per-layer / combinatorial beam selection
-> for the refined Type I single-panel codebook). Only `modeA` is implemented.
+`RefinedType1SinglePanelCodebook(..., mode="modeB")`. Every layer carries a
+single-beam column $[b_l;\varphi_{c_l} b_l]/\sqrt{\upsilon P}$ (Table
+5.2.2.2.1a-7) with a **common orthogonal group** $i_{1,1} = [q_1\ q_2]$:
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** §5.2.2.2.2a, the refined
-> Type I **multi-panel** codebook (`typeI-MultiPanel-r19`) for the large arrays.
-> No class exists; the module docstring states this explicitly.
+* **ranks 1–4** select one beam *per layer* inside the group via
+  $i_{1,2,l} \in \{0..N_1N_2{-}1\}$ with the reverse indexing
+  $n^{(l)} = N_1N_2 - 1 - i_{1,2,l}$, and a free per-layer QPSK co-phasing
+  $c_l = i_{2,l}$;
+* **ranks 5–8** select $L_G \in \{3,4\}$ *distinct* beams through the
+  clause-5.2.2.2.3 combinatorial index $i_{1,2}$ (coefficients per Tables
+  5.2.2.2.5-4 / 5.2.2.2.1a-5); layers pair up on the beams, and each pair's
+  co-phasings are the orthogonal $(\varphi_c, \varphi_{c+2}) = (\varphi_c,
+  -\varphi_c)$ pair indicated by a 1-bit $i_{2,g}$ (2-bit for the unpaired
+  layer), Table 5.2.2.2.1a-6 — so the high-rank precoders are exactly
+  orthonormal.
+
+The report type is `RefinedType1ModeBPMI`; the `typeI-SinglePanelRI-Restriction-r19`
+8-bit bitmap is the `ri_restriction` argument (both modes). Tests:
+[test_refined_type1_modeb_mp.py](../../tests/codebooks/test_refined_type1_modeb_mp.py).
+
+### Refined Type I multi-panel (§5.2.2.2.2a)
+
+Class [`RefinedType1MultiPanelCodebook`](../../src/nr_csi/codebooks/refined_type1mp_r19.py)
+(`typeI-MultiPanel-r19`), ranks 1–4, for the aggregated arrays of Table
+5.2.2.2.2a-1 ($({N_g,N}_1,N_2)$ ∈ {(2,4,3),(2,6,2)}@48, {(2,4,4),(2,8,2),(4,4,2)}@64,
+{(4,4,4),(4,8,2)}@128; `SUPPORTED_NG_N1N2_R19` in config.py). vs. the R15
+multi-panel codebook, each panel $j$ selects its **own** beam
+$(i_{1,1,j}, i_{1,2,j})$ over the full grid plus its **own** rank-2/3/4
+companion offset $i_{1,3,j}$ (Table 5.2.2.2.2a-2 — the same offsets as Table
+5.2.2.2.1a-3); $i_{1,4,q}$ are wideband inter-panel QPSK phases and $i_{2,j}$
+per-panel/per-subband polarization co-phasings. The panel-major port layout
+matches the R15 class. `beam_restriction` takes the `ng-n1-n2-cbsr-r19`
+grid bitmap and `ri_restriction` the 4-bit `ri-Restriction-r19`.
 
 ---
 
@@ -362,16 +387,14 @@ indices.
 | `RefinedEType2Codebook` (§5.2.2.2.5a) | R16 §5.2.2.2.5 | 48/64/128 | implemented — large geometry + param (rows 7,8) + RI guards |
 | `RefinedFeType2PortSelectionCodebook` (§5.2.2.2.9a) | R17 §5.2.2.2.7 | 48/64 | implemented — large geometry + RI guard, bars combo 8 |
 | `RefinedPredictedEType2Codebook` (§5.2.2.2.11a) | R18 §5.2.2.2.10 | 48/64/128 | implemented — large geometry + param (rows 8,9) + RI guards |
-| `RefinedType1SinglePanelCodebook` (§5.2.2.2.1a) | — (new) | 48/64/128 | implemented — `modeA` only; independent high-rank beam selection |
-| §5.2.2.2.1a `modeB` | — (new) | 48/64/128 | **[not implemented]** |
-| §5.2.2.2.2a refined Type I multi-panel | — (new) | 48/64/128 | **[not implemented]** |
+| `RefinedType1SinglePanelCodebook` (§5.2.2.2.1a) | — (new) | 48/64/128 | implemented — `modeA` and `modeB` |
+| `RefinedType1MultiPanelCodebook` (§5.2.2.2.2a) | — (new) | 48/64/128 | implemented — per-panel beams/offsets + inter-panel phases |
 
 The refined Type II classes show how cleanly the framework's parameterization
 scales: a new array size is a config table entry, not a new codebook. The refined
-Type I single-panel class shows the one place R19 actually changes the *structure*
-— letting the UE pick high-rank companion beams independently instead of from a
-fixed offset table. The refined Type I `modeB` and the refined Type I multi-panel
-codebook complete the standardized R19 picture but are not implemented here.
+Type I classes show the places R19 actually changes the *structure* — independent
+high-rank companion beams (`modeA`), per-layer beam selection (`modeB`), and
+per-panel beam selection (multi-panel).
 
 ---
 

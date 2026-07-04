@@ -115,11 +115,12 @@ is *not expected* to be configured with:
 * combo **5** when $P_{\text{CSI-RS}}=4$ *and*
   `typeII-PortSelectionRI-Restriction-r17` has $r_i=1$ for any $i>1$.
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** These
-> `paramCombination-r17` $\times$ $P$ restrictions are not enforced in
-> `R17Type2Codebook.__init__`; the constructor only checks that
-> $K_1=\alpha P$ is a positive even integer $\le P$ (which happens to reject the
-> combo-1/6-at-$P{=}4$ case via the even-integer guard, but not the others).
+All three prohibitions are enforced explicitly in
+`R17Type2Codebook.__init__` (the combo-5 conditional bar reads the
+`ri_restriction` bitmap, so barring it requires configuring ranks 3–4
+disallowed). The $K_1=\alpha P$ positive-even-integer check remains as the
+generic guard. Tests:
+[test_restriction_guards.py](../../tests/spec/test_restriction_guards.py).
 
 Derived quantities (`__init__` / `K0` property):
 
@@ -369,10 +370,9 @@ $r_3 r_2 r_1 r_0$ ($r_0$ = LSB). When $r_i=0$, PMI/RI reporting must not
 correspond to any precoder with $\upsilon = i+1$ layers. (The UE shall never
 report $\upsilon>4$.)
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** `R17Type2Codebook`
-> has no `rank_restriction` argument and `select`/`validate_r17` only check
-> $1\le\upsilon\le4$. The RI-restriction bitmap **is** implemented for the R18
-> predicted-PS subclass (§10), where it is enforced in `select`.
+Enforced: `R17Type2Codebook(..., ri_restriction=[r0..r3])` — `select` raises
+`ValueError` naming `typeII-PortSelectionRI-Restriction-r17` for a prohibited
+rank, and the bitmap feeds the combo-5-at-$P{=}4$ configuration bar (§2).
 
 ---
 

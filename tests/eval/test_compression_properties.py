@@ -76,7 +76,7 @@ class TestForcedFullTapLossless:
 
 
 def mean_sgcs_and_bits(cbk, n_drops=12, rank=1, seed=0, n_paths=4):
-    chan = RandomRayChannel(ANT, N3=cbk.N3, n_rx=2, n_paths=n_paths)
+    chan = RandomRayChannel(cbk.antenna, N3=cbk.N3, n_rx=2, n_paths=n_paths)
     rng = np.random.default_rng(seed)
     n_slots = getattr(cbk, "N4", 1)
     ss, bb = [], []
@@ -108,9 +108,18 @@ class TestMonotonicity:
         assert s8 >= s4 - 0.005 and b8 > b4
 
     def test_r16_more_beams(self):
-        # combos 2 -> 4 -> 7: L = 2, 4, 6 at fixed p_v = 1/4, beta = 1/2
+        # combos 2 -> 4 -> 7: L = 2, 4, 6 at fixed p_v = 1/4, beta = 1/2.
+        # combo 7 is only configurable at P = 32 with ranks 3-4 disallowed
+        # (5.2.2.2.5), so this knob runs on the 32-port array.
+        ant32 = AntennaConfig.standard(4, 4)
         self.assert_knob(
-            [R16Type2Codebook(ANT, N3=8, param_combination=c) for c in (2, 4, 7)]
+            [
+                R16Type2Codebook(
+                    ant32, N3=8, param_combination=c,
+                    ri_restriction=[1, 1, 0, 0] if c in (7, 8) else None,
+                )
+                for c in (2, 4, 7)
+            ]
         )
 
     def test_r16_more_taps(self):

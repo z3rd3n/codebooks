@@ -1,28 +1,31 @@
 # Chapter 8 — Coherent Joint Transmission (CJT) Type II codebooks
 
-> 🚩 **STANDARDIZED — NOT IMPLEMENTED IN THIS CODEBASE.** The entire CJT family
-> (TS 38.214 §5.2.2.2.8 *Enhanced Type II codebook for CJT* and §5.2.2.2.9
-> *Further enhanced Type II port selection codebook for CJT*) is **not implemented**
-> in `src/nr_csi/`. The repo lists "R18 CJT codebooks in §5.2.2.2.8/9" as out of
-> scope. This chapter documents them from the spec for completeness so the
-> tutorial set is exhaustive; **every formula and field below is spec-only.**
-
-* **Spec:** TS 38.214 Release-18 ("i00") §5.2.2.2.8 (heading line 11192) and
-  §5.2.2.2.9 (heading line 11830) of
-  [38214-i00.md](../../specs/38214-i00.md).
+* **Spec:** TS 38.214 v19.4.0 §5.2.2.2.8 (heading line 11136) and §5.2.2.2.9
+  (heading line 11705) of
+  [38.214-v19.4.0.md](../../specs/38.214-v19.4.0.md).
 * **`codebookType`:** `typeII-CJT-r18` (§5.2.2.2.8) /
   `typeII-CJT-PortSelection-r18` (§5.2.2.2.9).
-* **Code:** none — not implemented. The closest implemented codebooks are
-  [Chapter 4 — eType II R16](04-etype2-r16.md) (CJT generalizes it) and
+* **Code:** [cjt_r18.py](../../src/nr_csi/codebooks/cjt_r18.py) — classes
+  `R18CJTCodebook` (§5.2.2.2.8) and `R18CJTPortSelectionCodebook` (§5.2.2.2.9),
+  report type `R18CJTPMI`; configuration tables `CJT_L_COMBOS` /
+  `CJT_PV_BETA` / `CJT_ALLOWED` and the PS analogues. Tests:
+  [test_cjt_r18.py](../../tests/codebooks/test_cjt_r18.py). The base machinery
+  is [Chapter 4 — eType II R16](04-etype2-r16.md) (CJT generalizes it) and
   [Chapter 5 — feType II PS R17](05-fetype2-r17.md) (the PS-CJT generalizes that).
 * **Ports:** $P_\text{CSI-RS} = 2N_1N_2 \in \{4,8,12,16,24,32\}$ **per CSI-RS
-  resource**, $N_\text{TRP} \in \{1,2,3,4\}$ resources.
+  resource**, $N_\text{TRP} \in \{1,2,3,4\}$ resources. The code aggregates the
+  resources' ports along the channel's port axis (resource-major, `[pol0;
+  pol1]` within a resource); unselected resources' precoder rows are zero.
 * **Ranks:** 1–4.
 * **Compression:** spatial ($L_n$ beams *per TRP*) + delay ($M_v$ taps, shared
   across TRPs) + **inter-TRP co-phasing** across $N$ cooperating transmission
   points.
 * **Prereq:** [Chapter 4](04-etype2-r16.md) (eType II spatial+delay machinery;
   CJT reuses it per TRP) and [Foundations](00-foundations.md).
+
+Degeneracy anchors (asserted PMI-for-PMI by the test suite): with
+$N_\text{TRP}=1$ and `mode2`, `R18CJTCodebook` reproduces `R16Type2Codebook`
+exactly, and `R18CJTPortSelectionCodebook` reproduces `R17Type2Codebook`.
 
 ---
 

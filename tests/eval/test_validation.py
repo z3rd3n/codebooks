@@ -29,7 +29,9 @@ class TestConstructorGuards:
             R15Type2Codebook(SMALL, N3=4, L=4)
 
     def test_r16_l_exceeds_group_size(self):
-        with pytest.raises(ValueError, match="orthogonal group"):
+        # at P = 4 the explicit 5.2.2.2.5 configuration bar (combinations 3-8)
+        # fires before the generic L > N1*N2 check
+        with pytest.raises(ValueError, match="P_CSI-RS=4"):
             R16Type2Codebook(SMALL, N3=4, param_combination=3)  # L = 4
 
     def test_r16_ps_large_l_allowed(self):

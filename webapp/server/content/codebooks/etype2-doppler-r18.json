@@ -1,0 +1,58 @@
+{
+  "id": "etype2-doppler-r18",
+  "name": "Enhanced Type II Codebook for Predicted PMI (Doppler)",
+  "shortName": "eType II Doppler",
+  "release": "R18",
+  "specClause": "TS 38.214 §5.2.2.2.10",
+  "docFile": "06-etype2-doppler-r18.md",
+  "position": 8,
+  "lineage": {"parent": "etype2-r16", "adds": "a third compression axis — temporal (Doppler) — that predicts the precoder across several future time slots from one report"},
+  "tagline": "One report, several future moments: compress how the channel evolves in time the same way R16 compressed how it varies in frequency.",
+  "overview": [
+    "R16 noticed that a beam's coefficient varies smoothly across **frequency** and compressed that curve into a handful of delay taps. R18's Doppler codebook applies the identical idea to **time**: on a moving phone, the precoder doesn't jump randomly from one radio slot to the next — it evolves smoothly, and that evolution is the physical signature of a small number of **Doppler shifts** (the rate-of-change caused by motion). Instead of sending a fresh channel report every slot, the phone (**UE**) sends *one* report that the base station (**gNB**) expands into a predicted precoder for each of $N_4$ **future slot intervals** — trading a stream of reports for a single, richer one.",
+    "Mechanically, this is R16 with a third DFT (discrete Fourier transform) axis bolted on. Where R16's coefficient was a sum over delay taps, R18's coefficient is a sum over delay taps *and* Doppler shifts — a genuine three-way Tucker-style tensor factorization of the precoder into spatial, frequency, and temporal DFT factors. The temporal axis uses $Q = 2$ Doppler shifts per layer: one fixed reference (no motion) plus one reported nonzero shift capturing the dominant rate of change. At $N_4 = 1$ (only one interval, no real prediction needed) the whole machinery degenerates exactly to R16 — a useful sanity check and a clean way to see R18 as a strict generalization.",
+    "The coefficient budget grows with the extra Doppler dimension: $K_0 = \\lceil 2\\beta L M_1 Q \\rceil$, twice R16's formula because there are now two Doppler bins to potentially fill. On a channel that isn't actually moving, the second Doppler bin stays empty and its share of the budget is quietly donated to the static (DC) bin — so, at matched parameters, R18 is at least as accurate as R16 on a static channel, just at strictly higher overhead. That is the honest trade this codebook makes: pay more bits once, in exchange for not having to send $N_4$ separate reports.",
+    "The fairness comparison that matters is therefore *per interval covered*, not per report: R16 needs $N_4$ separate reports to describe $N_4$ future intervals, while R18 needs exactly one. Whether that trade is worth it depends entirely on how fast the channel is actually changing and how expensive uplink feedback capacity is in the deployment — the classic **CSI aging** trade-off this whole codebook exists to address."
+  ],
+  "howItWorks": [
+    {"title": "UE (or its prediction pipeline) obtains the channel for N4 future intervals", "body": "Rather than a single snapshot, the selection process works from channel estimates covering all N4 consecutive future slot intervals to be predicted — the standard genie-aided upper-bound assumption used to evaluate this codebook."},
+    {"title": "UE selects beams jointly across all intervals", "body": "The spatial beam search (the same energy-capture group-and-beam procedure as R16) is run jointly over the combined time-and-frequency target data, so one beam choice serves every predicted interval."},
+    {"title": "UE compresses frequency into delay taps, exactly as R16", "body": "For each layer, a forward FFT (fast Fourier transform) across subbands picks the M_v most energetic delay taps, same combinatorial encoding as R16."},
+    {"title": "UE compresses time into Doppler shifts", "body": "A second forward FFT, this time across the N4 future intervals, finds the dominant nonzero Doppler shift per layer (the second of Q=2 shifts) — the genuinely new step in this family."},
+    {"title": "UE quantizes amplitude, phase, and the bitmap over the extra Doppler axis", "body": "The same R16 amplitude/phase machinery now runs over the added Doppler dimension, with a bitmap covering beam x delay-tap x Doppler-shift combinations."},
+    {"title": "Report travels over the uplink, gNB predicts and transmits", "body": "The single compact PMI (precoding matrix indicator) is expanded by the gNB, via the frequency and temporal DFTs together, into a full predicted precoder for every subband and every one of the N4 future intervals, then used for transmission as those intervals arrive."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "Which orthogonal beam group the L beams are drawn from.", "detail": "Same wideband rotation indicator as R16, chosen jointly across all N4 predicted intervals."},
+    {"field": "i12", "plain": "Which L specific beams within that group.", "detail": "Same combinatorial beam-combination index as R16."},
+    {"field": "i16", "plain": "Which delay taps carry each beam's frequency response, per layer.", "detail": "Identical mechanism to R16's frequency-domain tap selection."},
+    {"field": "i110", "plain": "The offset of the second (nonzero) Doppler shift, per layer.", "detail": "Identifies the dominant rate-of-change beyond the static reference shift; not reported at all when N4=2, since there is then only one possible nonzero offset."},
+    {"field": "i17", "plain": "A bitmap marking which beam/tap/Doppler-shift coefficients are nonzero, per layer.", "detail": "R16's bitmap extended with the extra Doppler-shift axis — now spans beam, delay tap, and Doppler shift."},
+    {"field": "i18", "plain": "Which coefficient is the strongest, per layer.", "detail": "Same dual-mode indicator as R16, now searched among all Doppler shifts of the strongest delay tap."},
+    {"field": "i23", "plain": "The per-polarization reference amplitude, per layer.", "detail": "Identical to R16's mechanism."},
+    {"field": "i24", "plain": "The differential amplitude for each kept coefficient.", "detail": "Identical to R16's mechanism, now covering coefficients across the Doppler axis too."},
+    {"field": "i25", "plain": "The 16-PSK phase for each kept coefficient.", "detail": "Identical to R16's mechanism, extended over the Doppler axis."}
+  ],
+  "parametersExplained": [
+    {"key": "param_combination", "plain": "A preset (1-9) bundling beam count, tap-count fractions, and coefficient budget fraction, tuned for the Doppler codebook.", "guidance": "Pick a low combination for a tight budget; combinations 8-9 (L=6 beams) need 32 ports and are barred whenever any rank above 2 is allowed or R=2."},
+    {"key": "n4", "plain": "How many future slot intervals a single report predicts (1, 2, 4, or 8).", "guidance": "N4=1 degenerates exactly to R16 with no prediction; larger N4 covers more future ground per report at the cost of a larger coefficient bitmap. This is the parameter the runner uses as n_slots when evaluating."}
+  ],
+  "strengths": [
+    "One report replaces N4 separate reports, directly reducing feedback frequency on mobile channels.",
+    "Directly attacks CSI aging — the accuracy loss from a stale report on a moving channel.",
+    "Falls back exactly to R16 at N4=1, so there is no accuracy penalty when prediction isn't needed.",
+    "On a static channel the unused Doppler budget is donated back to the static bin, so accuracy never falls below matched-parameter R16."
+  ],
+  "limitations": [
+    "The largest report in the family so far — the bitmap alone gains a full extra Doppler factor.",
+    "Assumes genie-aided knowledge of the future channel during selection; the actual channel-prediction step that would produce this in a real deployment is out of scope.",
+    "None of the spec's slot-interval timing, TDCQI multi-CQI, or CPU-occupancy accounting machinery is modeled — only the codebook math.",
+    "The SD-beam subset restriction bitmap specific to this Doppler codebook is not implemented; only RI (rank) restriction is enforced."
+  ],
+  "whenToUse": "Use eType II Doppler for genuinely mobile scenarios where the channel changes meaningfully between measurement and transmission, and where the reduced reporting frequency is worth the larger per-report cost — the mobility figures in this catalog quantify exactly that trade-off.",
+  "mathHighlight": {
+    "caption": "Each coefficient is now a sum over both delay taps and Doppler shifts, generated by frequency and temporal DFTs applied together.",
+    "latex": "\\sum_{f=0}^{M_v-1} y_{t,l}^{(f)} \\sum_{\\tau=0}^{Q-1} z_{\\iota,l}^{(\\tau)}\\, p^{(2)}_{l,i,f,\\tau}\\, \\varphi_{l,i,f,\\tau}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "Doppler", "delay tap", "N3", "rank/layer", "overhead bits", "param combination", "Monte-Carlo drop"]
+}

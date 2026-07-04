@@ -1,0 +1,57 @@
+{
+  "id": "cjt-r18",
+  "name": "Coherent Joint Transmission (CJT) Type II Codebook",
+  "shortName": "CJT",
+  "release": "R18",
+  "specClause": "TS 38.214 §5.2.2.2.8 / §5.2.2.2.9",
+  "docFile": "08-cjt.md",
+  "position": 9,
+  "lineage": {"parent": "etype2-r16", "adds": "a per-transmission-point beam report plus an inter-site phase alignment, so several base stations can transmit as one distributed array"},
+  "tagline": "Several separated base-station sites acting as one giant antenna array — describe each site's beam, then say how to phase-align the sites so their signals add up instead of cancel.",
+  "overview": [
+    "Ordinary Type II describes a precoder for one base station's antenna array. **Coherent joint transmission (CJT)** asks a harder question: what if **several geographically separated transmission points (TRPs)** — think several nearby cell sites — want to serve one phone jointly, as if they were a single giant distributed array? For that to work coherently (signals adding constructively rather than randomly canceling), the phone (**UE**) must report not just each site's beam, but the **relative phase and timing offset between sites**.",
+    "The CJT codebook is, structurally, eType II R16 **replicated once per cooperating TRP**, glued together with two genuinely new ingredients. First, each TRP $j$ gets its **own** spatial report — its own orthogonal beam group and its own $L_j$ selected DFT (discrete Fourier transform) beams, since different sites see the channel from different angles. Second, an **inter-TRP co-phasing** term $\\psi_j$ — a per-TRP frequency-dependent phase ramp — corrects for the relative delay between sites, exactly the quantity needed for their signals to combine coherently rather than destructively at the phone. Everything else — the delay-tap compression, the amplitude/phase quantization tables, the strongest-coefficient convention — is shared unchanged with eType II R16, now applied per TRP.",
+    "How many TRPs cooperate ($N_{TRP} \\in \\{1,2,3,4\\}$) and how many beams each contributes are both configurable; a `mode1` reports the inter-TRP phase explicitly, while `mode2` skips it and lets the per-coefficient phases alone carry the alignment. With $N_{TRP}=1$ the codebook degenerates exactly to plain R16 eType II — the same kind of clean sanity-check seen elsewhere in this family. A port-selection sibling (§5.2.2.2.9) swaps each TRP's DFT beam search for freely selected ports, mirroring R17's relationship to R16.",
+    "The cost of coordinating $N$ sites is, unsurprisingly, roughly $N$ times an eType II report, plus a small TRP-selection bitmap and the inter-TRP phase offsets. That is the honest price of multi-site coherence: CJT buys the array-gain and interference-cancellation benefits of a much larger distributed antenna, at overhead that grows roughly linearly with the number of cooperating sites."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel from every cooperating TRP", "body": "The phone estimates the channel separately from each transmission point's CSI-RS (channel state information reference signal) resource, stacked along the antenna-port axis with each TRP occupying its own block of ports."},
+    {"title": "UE selects beams independently, per TRP", "body": "For each TRP, the same energy-capture group-and-beam search used by eType II R16 picks that TRP's own L beams from its own orthogonal group — different sites can favor different directions."},
+    {"title": "UE finds the shared delay taps and the inter-TRP phase offsets", "body": "A common set of delay taps is chosen across all TRPs and layers (as in R16), and, in mode1, a frequency-dependent phase offset per non-reference TRP is estimated to align that site's signal with the reference TRP."},
+    {"title": "UE quantizes amplitude, phase, and the coefficient bitmap across all TRPs", "body": "The strongest coefficient across the combined beam set (spanning every TRP) becomes the fixed reference; the rest are quantized with R16's amplitude/phase tables and pruned to the coefficient budget."},
+    {"title": "Report travels over the uplink", "body": "The per-TRP beam indices, the TRP-selection bitmap, the shared delay taps, the inter-TRP phase offsets, and the quantized coefficients form the PMI (precoding matrix indicator)."},
+    {"title": "gNB reconstructs a stacked precoder and every TRP transmits coherently", "body": "The network rebuilds one precoder block per TRP, applies the reported inter-TRP phase alignment, and every cooperating site transmits its block so the signals combine constructively at the phone."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "Each TRP's own orthogonal beam group.", "detail": "One rotation indicator per cooperating TRP, analogous to R16's i11 but repeated per site since each TRP has its own angular view of the phone."},
+    {"field": "i12", "plain": "Each TRP's own selected beams.", "detail": "One combinatorial beam-combination index per TRP, sized to that TRP's configured beam count L_j."},
+    {"field": "i16", "plain": "The shared delay taps used by every TRP, per layer.", "detail": "A single set of delay taps common to all cooperating TRPs and used identically to R16's frequency compression."},
+    {"field": "i17", "plain": "A bitmap over the combined beam set (all TRPs) and delay taps, per layer.", "detail": "R16's bitmap generalized to span every TRP's beams, not just one site's."},
+    {"field": "i18", "plain": "Which coefficient, across all TRPs, is the strongest, per layer.", "detail": "Same dual-mode indicator as R16, now indexed over the concatenated multi-TRP beam axis."},
+    {"field": "i19", "plain": "The relative phase/timing offset of each non-reference TRP.", "detail": "In mode1, one offset per cooperating TRP beyond the first (reference) TRP, entering the reconstruction as a frequency-dependent phase ramp that aligns that site's contribution; not reported at all in mode2."},
+    {"field": "i23", "plain": "The per-polarization reference amplitude, per layer.", "detail": "Same mechanism as R16, applied across the combined multi-TRP coefficient set."}
+  ],
+  "parametersExplained": [
+    {"key": "n_trp", "plain": "How many transmission points (1-4) cooperate to serve the phone.", "guidance": "n_trp=1 reduces exactly to eType II R16 — start there to see the baseline before adding cooperating sites."},
+    {"key": "param_combination", "plain": "The per-TRP beam-count preset (which TRPs get how many beams).", "guidance": "Symmetric combinations (equal beams per TRP) are a reasonable default; asymmetric ones let stronger TRPs carry more beams."},
+    {"key": "variant", "plain": "Whether the CJT codebook uses DFT beams (regular) or freely selected ports (port-selection) per TRP.", "guidance": "Pick port-selection when each TRP's CSI-RS is already beamformed, mirroring the R16-vs-R17 choice for a single site."}
+  ],
+  "strengths": [
+    "Unlocks distributed-array gains — coherent combining across multiple physically separated sites.",
+    "Reuses R16's proven per-beam compression and quantization machinery almost unchanged, per TRP.",
+    "Degenerates exactly to plain eType II R16 at n_trp=1, giving a clean baseline comparison.",
+    "The port-selection sibling extends the same TRP-cooperation idea to reciprocity-based deployments."
+  ],
+  "limitations": [
+    "Overhead scales roughly linearly with the number of cooperating TRPs — the most expensive report family in this catalog.",
+    "Requires all TRPs to be tightly synchronized and share timing/phase references for coherent combining to actually work in practice.",
+    "Subset restriction is only supported at the coarse '00'/'11' codepoints per resource, not the full amplitude-cap granularity of plain R16.",
+    "TRP resource selection (which subset of the configured TRPs actually cooperate) is a bitmap layered on top of an already large report."
+  ],
+  "whenToUse": "Use CJT to model multi-site cooperative deployments (distributed MIMO / cell-free-style clusters) and to see how feedback overhead scales as more transmission points join the cooperating set.",
+  "mathHighlight": {
+    "caption": "Every non-reference TRP's contribution carries an extra frequency-dependent phase ramp that aligns it with the reference TRP for coherent combining.",
+    "latex": "\\text{TRP }j:\\quad e^{\\,j2\\pi t\\psi_j/N_3} \\sum_i v_{m_{1,j}^{(i)},m_{2,j}^{(i)}}\\, p^{(1)}_{l,\\cdot}\\, \\sum_f y_{t,l}^{(f)}\\, p^{(2)}_{l,i,f,j}\\, \\varphi_{l,i,f,j}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "TRP/CJT", "DFT beam", "delay tap", "N3", "rank/layer", "overhead bits", "dual polarization"]
+}

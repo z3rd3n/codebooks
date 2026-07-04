@@ -1,4 +1,10 @@
-"""R15 Type I single-panel codebook, TS 38.214 section 5.2.2.2.1."""
+"""R15 Type I single-panel codebook, TS 38.214 section 5.2.2.2.1.
+
+``Type1Codebook`` covers the 4-32 port DFT-beam construction;
+``TwoPortType1Codebook`` covers the fixed 2-port codebook of
+Table 5.2.2.2.1-1 (4 rank-1 + 2 rank-2 precoders, restricted by the 6-bit
+``twoTX-CodebookSubsetRestriction`` bitmap).
+"""
 
 from __future__ import annotations
 
@@ -392,3 +398,115 @@ class Type1Codebook(CodebookScheme):
         if pmi.rank in (2, 3, 4):
             bits["i13"] = math.ceil(math.log2(self._n_i13(pmi.rank)))
         return bits
+
+
+@dataclass
+class TwoPortType1PMI:
+    rank: int
+    i2: np.ndarray  # (N3,) codebook index per PMI frequency unit
+
+
+#: Table 5.2.2.2.1-1: the four rank-1 and two rank-2 precoders.
+_TWO_PORT_RANK1 = [
+    np.array([[1.0], [phi]]) / math.sqrt(2)
+    for phi in (1.0, 1.0j, -1.0, -1.0j)
+]
+_TWO_PORT_RANK2 = [
+    np.array([[1.0, 1.0], [phi, -phi]]) / 2.0
+    for phi in (1.0, 1.0j)
+]
+
+
+class TwoPortType1Codebook(CodebookScheme):
+    """2-port Type I codebook, TS 38.214 Table 5.2.2.2.1-1.
+
+    The PMI is a single per-frequency-unit codebook index: four rank-1
+    precoders [1; phi]/sqrt(2), phi in {1, j, -1, -j}, and two rank-2
+    precoders [1 1; phi -phi]/2, phi in {1, j}.  The 6-bit
+    ``twoTX-CodebookSubsetRestriction`` bitmap [a0..a5] prohibits indices:
+    bits 0-3 map to the rank-1 indices 0-3, bits 4-5 to the rank-2 indices
+    0-1.  ``rank_restriction`` is the 2-port slice [r0, r1] of
+    ``typeI-SinglePanel-ri-Restriction``.
+    """
+
+    name = "R15 Type I 2-port"
+
+    def __init__(
+        self,
+        N3: int = 1,
+        restriction: np.ndarray | None = None,
+        rank_restriction: np.ndarray | None = None,
+        selection_snr_db: float = 10.0,
+    ) -> None:
+        if N3 < 1:
+            raise ValueError("N3 must be positive")
+        self.antenna = AntennaConfig(N1=1, N2=1, O1=1, O2=1, strict=False)  # P = 2
+        self.N3 = N3
+        if restriction is None:
+            restriction = np.ones(6, dtype=bool)
+        self.restriction = np.asarray(restriction, dtype=bool)
+        if self.restriction.shape != (6,):
+            raise ValueError("twoTX-CodebookSubsetRestriction must have 6 bits [a0..a5]")
+        if rank_restriction is None:
+            rank_restriction = np.ones(2, dtype=bool)
+        self.rank_restriction = np.asarray(rank_restriction, dtype=bool)
+        if self.rank_restriction.shape != (2,):
+            raise ValueError("rank restriction r = [r0, r1] must have 2 bits")
+        self.selection_rho = 10 ** (selection_snr_db / 10)
+
+    def _codebook(self, rank: int) -> list[np.ndarray]:
+        return _TWO_PORT_RANK1 if rank == 1 else _TWO_PORT_RANK2
+
+    def _allowed(self, rank: int) -> list[int]:
+        offset = 0 if rank == 1 else 4
+        n = 4 if rank == 1 else 2
+        return [i for i in range(n) if self.restriction[offset + i]]
+
+    def precoder(self, pmi: TwoPortType1PMI) -> np.ndarray:
+        if pmi.rank not in (1, 2):
+            raise ValueError(f"rank {pmi.rank} not in 1..2 for 2 ports")
+        i2 = np.asarray(pmi.i2)
+        n = 4 if pmi.rank == 1 else 2
+        if i2.shape != (self.N3,) or i2.min() < 0 or i2.max() >= n:
+            raise ValueError(f"i2 must be ({self.N3},) with values in [0, {n})")
+        book = self._codebook(pmi.rank)
+        W = np.empty((1, self.N3, 2, pmi.rank), dtype=complex)
+        for t in range(self.N3):
+            W[0, t] = book[int(i2[t])]
+        return W
+
+    def select(self, H: np.ndarray, rank: int = 1) -> TwoPortType1PMI:
+        if rank not in (1, 2):
+            raise ValueError(f"2-port Type I rank {rank} unsupported")
+        if not self.rank_restriction[rank - 1]:
+            raise ValueError(
+                f"rank {rank} prohibited by typeI-SinglePanel-ri-Restriction (r{rank - 1}=0)"
+            )
+        H = np.asarray(H)
+        if H.ndim != 4:
+            raise ValueError("H must be [slot, t, rx, port]")
+        Ht = H[-1]
+        if Ht.shape[0] != self.N3:
+            raise ValueError(f"channel has {Ht.shape[0]} frequency units, expected {self.N3}")
+        if Ht.shape[-1] != 2:
+            raise ValueError(f"channel has {Ht.shape[-1]} ports, expected 2")
+        allowed = self._allowed(rank)
+        if not allowed:
+            raise RuntimeError(
+                "no feasible 2-port PMI under twoTX-CodebookSubsetRestriction"
+            )
+        book = self._codebook(rank)
+        eye = np.eye(rank, dtype=complex)
+        i2 = np.zeros(self.N3, dtype=int)
+        for t in range(self.N3):
+            best, best_se = allowed[0], -np.inf
+            for i in allowed:
+                hw = Ht[t] @ book[i]
+                _, logdet = np.linalg.slogdet(eye + self.selection_rho * (hw.conj().T @ hw))
+                if np.real(logdet) > best_se:
+                    best_se, best = float(np.real(logdet)), i
+            i2[t] = best
+        return TwoPortType1PMI(rank, i2)
+
+    def overhead_bits(self, pmi: TwoPortType1PMI) -> dict[str, int]:
+        return {"i2": self.N3 * (2 if pmi.rank == 1 else 1)}

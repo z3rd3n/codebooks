@@ -100,6 +100,7 @@ class R15Type2Codebook(CodebookScheme):
         port_selection: bool = False,
         d: int = 1,
         restriction: TypeIIRestriction | None = None,
+        ri_restriction: np.ndarray | None = None,
     ) -> None:
         if L not in (2, 3, 4):
             raise ValueError("numberOfBeams L must be in {2,3,4}")
@@ -130,7 +131,23 @@ class R15Type2Codebook(CodebookScheme):
                 raise ValueError(f"B2 must be (4, {antenna.N1 * antenna.N2}) codepoints")
         self.restriction = restriction
         self.d = d
+        # typeII-RI-Restriction / typeII-PortSelectionRI-Restriction: 2-bit
+        # bitmap [r0, r1]; r_i = 0 prohibits rank i+1 (TS 38.214 5.2.2.2.3/.4).
+        if ri_restriction is None:
+            ri_restriction = np.ones(2, dtype=bool)
+        self.ri_restriction = np.asarray(ri_restriction, dtype=bool)
+        if self.ri_restriction.shape != (2,):
+            raise ValueError(
+                "typeII-RI-Restriction r = [r0, r1] must have 2 bits"
+            )
         self.name = "R15 Type II PS" if port_selection else "R15 Type II"
+
+    def _ri_restriction_name(self) -> str:
+        return (
+            "typeII-PortSelectionRI-Restriction"
+            if self.port_selection
+            else "typeII-RI-Restriction"
+        )
 
     # ------------------------------------------------------------------
     # spatial bases
@@ -212,6 +229,10 @@ class R15Type2Codebook(CodebookScheme):
     def select(self, H: np.ndarray, rank: int = 1) -> R15Type2PMI:
         if rank not in (1, 2):
             raise ValueError("R15 Type II supports ranks 1-2")
+        if not self.ri_restriction[rank - 1]:
+            raise ValueError(
+                f"rank {rank} prohibited by {self._ri_restriction_name()} (r{rank - 1}=0)"
+            )
         from ..baselines.ideal import eigen_precoder
 
         H = np.asarray(H)[-1]  # (N3, Nr, P)

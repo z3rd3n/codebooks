@@ -1,0 +1,55 @@
+{
+  "id": "refined-type2-r19",
+  "name": "Refined Type II Codebook Family",
+  "shortName": "Refined Type II",
+  "release": "R19",
+  "specClause": "TS 38.214 §5.2.2.2.5a / §5.2.2.2.9a / §5.2.2.2.11a",
+  "docFile": "07-refined-r19.md",
+  "position": 12,
+  "lineage": {"parent": "etype2-r16", "adds": "the same R16/R17/R18 reconstruction, extended to 48/64/128-port arrays with a few extra configuration guards"},
+  "tagline": "Nothing about the math changes for a bigger array — the whole R19 upgrade for Type II is a bigger antenna-geometry table plus a few new configuration rules.",
+  "overview": [
+    "This entry bundles three closely related Release-19 codebooks that all make the same point: **eType II (R16), further-enhanced Type II port selection (R17), and eType II Doppler (R18) did not need any new reconstruction math to support much larger antenna arrays.** Because the whole family is parameterized cleanly by antenna geometry, beam count, and coefficient budget, \"support a 128-port array\" turned out to be a configuration-table entry, not a new algorithm. Each Release-19 refined variant is, quite literally, the earlier codebook's class with a bigger geometry table and a handful of extra guard rules layered on top.",
+    "**Refined eType II** (extends R16) works on the 48/64/128-port geometries and reuses R16's exact beam-combination and delay-tap machinery; it adds a rule barring the richest (6-beam) parameter rows whenever the array is small or a rank above 2 is permitted, since that combination would be too expensive to justify. **Refined feType II port selection** (extends R17) is available only on 48 and 64-port arrays — the 128-port geometries are not defined for this variant in the standard — and bars one particular high-overhead parameter row the UE is not expected to be configured with. **Refined predicted eType II** (extends R18 Doppler) again spans 48/64/128 ports and adds the same kind of guard against combining a large 6-beam parameter row with high rank or the two-subband-per-CQI-subband mode.",
+    "Pick the `variant` — regular, port-selection, or predicted — to choose which base codebook's reconstruction and selection algorithm this entry runs, exactly as documented in their own catalog entries (eType II R16, feType II PS R17, and eType II Doppler R18 respectively). Everything about *how the report is built and read back* is identical to those chapters; only the antenna geometry range and a few standardized configuration bars differ.",
+    "This is a useful lens on how the whole codebook framework was designed: the DFT (discrete Fourier transform) bases, combinatorial index codecs, and amplitude/phase quantization are all written generically enough that a new array size genuinely is just a new row in a lookup table, not a rewrite. The interesting design work for Release 19's very large arrays went instead into the **Type I** family (see the other two Release-19 entries in this catalog), where the beam-selection *structure* really did need to change."
+  ],
+  "howItWorks": [
+    {"title": "UE measures the channel on a large Release-19 array", "body": "The phone estimates the channel via CSI-RS (channel state information reference signal) across one of the Release-19 large-array geometries (48, 64, or 128 ports)."},
+    {"title": "UE runs the exact selection algorithm of the chosen variant's parent codebook", "body": "Beam selection, delay-tap compression, and (for the predicted variant) Doppler-shift compression proceed exactly as described in eType II R16 / feType II PS R17 / eType II Doppler R18 — nothing in the algorithm itself is aware the array is larger."},
+    {"title": "UE quantizes coefficients with the same amplitude/phase tables", "body": "Reference and differential amplitudes, 16-PSK (phase-shift keying) phases, and the nonzero-coefficient bitmap are computed identically to the parent codebook."},
+    {"title": "A handful of extra configuration guards apply", "body": "Certain high-overhead parameter rows (typically the ones using 6 beams) are barred when the array is too small, when a rank above 2 is permitted, or when the two-subband-per-CQI-subband mode is active — standardized rules preventing configurations the UE would never realistically be asked to support."},
+    {"title": "Report travels over the uplink", "body": "The PMI (precoding matrix indicator) fields are identical in structure to the parent codebook's, just sized to the larger antenna geometry."},
+    {"title": "gNB reconstructs and transmits", "body": "The base station (gNB) rebuilds the precoder with the parent codebook's exact reconstruction formula, now spanning a much larger antenna array, and transmits."}
+  ],
+  "whatIsReported": [
+    {"field": "i11", "plain": "The orthogonal beam group / rotation indicator (regular and predicted variants).", "detail": "Identical role to eType II R16's i11, now indexing a much larger oversampled grid for the 48/64/128-port geometries."},
+    {"field": "i12", "plain": "The selected beams within that group (regular and predicted) or the selected ports (port-selection variant).", "detail": "Same combinatorial mechanism as the parent codebook, sized to the larger array."},
+    {"field": "i16", "plain": "The delay taps carrying each beam's frequency response, per layer.", "detail": "Identical mechanism to the parent codebook's frequency-domain compression."},
+    {"field": "i17", "plain": "The nonzero-coefficient bitmap, per layer.", "detail": "Identical mechanism to the parent codebook, unaffected in structure by the larger array."},
+    {"field": "i110", "plain": "The second Doppler-shift offset, per layer (predicted variant only).", "detail": "Identical to eType II Doppler R18's i110, present only when the predicted variant is selected with N4 > 2."}
+  ],
+  "parametersExplained": [
+    {"key": "variant", "plain": "Which Release-19 refined codebook to run: regular (extends R16), port-selection (extends R17), or predicted (extends R18 Doppler).", "guidance": "Pick regular for a general large-array report, port-selection for reciprocity-based deployments (48/64 ports only), or predicted for mobility scenarios needing multi-interval prediction on a large array."},
+    {"key": "param_combination", "plain": "The same beam-count / tap-fraction / budget preset table as the corresponding parent codebook (R16, R17, or R18).", "guidance": "The richest (6-beam) rows are unavailable on small arrays or when ranks above 2 are permitted — pick a mid-range combination if you hit that guard."},
+    {"key": "d", "plain": "Antenna geometry: choose one of the Release-19 large-array (N1,N2) pairs for 48, 64, or 128 total ports.", "guidance": "Larger arrays unlock richer beam grids but do not by themselves change the reconstruction algorithm — try the same param_combination across two array sizes to see that overhead scales with parameters, not array size, for a fixed report."}
+  ],
+  "strengths": [
+    "Extends proven R16/R17/R18 accuracy and compression directly to very large 48/64/128-port arrays.",
+    "No new reconstruction algorithm to learn — the math is identical to the parent codebook.",
+    "A clean illustration of how a well-parameterized codebook framework absorbs a much bigger antenna without a rewrite.",
+    "Inherits whichever parent variant's specific strength applies: R16's frequency compression, R17's reciprocity efficiency, or R18's mobility prediction."
+  ],
+  "limitations": [
+    "The port-selection variant is not defined for 128-port geometries in the standard, only 48/64.",
+    "The richest parameter rows are barred in several configurations, reducing the achievable beam count on constrained setups.",
+    "Inherits every limitation of its chosen parent codebook (R16, R17, or R18) unchanged.",
+    "Choosing the right variant requires understanding the R16/R17/R18 trade-offs described in their own catalog entries first."
+  ],
+  "whenToUse": "Use Refined Type II whenever you need R16/R17/R18-style Type II accuracy on a genuinely large antenna array (48+ ports) — pick the variant matching your deployment: regular for a general report, port-selection for TDD reciprocity, predicted for mobility.",
+  "mathHighlight": {
+    "caption": "The reconstruction is identical to the chosen parent codebook's formula; only the antenna geometry (N1, N2) and a few configuration guards differ.",
+    "latex": "W^l_t = \\frac{1}{\\sqrt{N_1 N_2\\, \\gamma_{t,l}}}\\sum_{i=0}^{L-1} v_{m_1^{(i)},m_2^{(i)}}\\, p^{(1)}_{l,\\cdot}\\, \\sum_{f=0}^{M_v-1} y_{t,l}^{(f)}\\, p^{(2)}_{l,i,f}\\, \\varphi_{l,i,f}"
+  },
+  "glossary": ["PMI", "gNB", "UE", "CSI-RS", "DFT beam", "delay tap", "Doppler", "port selection", "N3", "rank/layer", "param combination"]
+}
