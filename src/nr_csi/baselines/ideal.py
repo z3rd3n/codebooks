@@ -21,6 +21,31 @@ def eigen_precoder(H: np.ndarray, rank: int = 1) -> np.ndarray:
     return W / np.sqrt(rank)
 
 
+def capacity_upper_bound(H: np.ndarray, rank: int, rho: float) -> float:
+    """True (waterfilling) capacity using at most ``rank`` streams, total
+    transmit power ``rho`` (noise power 1) -- the provable supremum over
+    *any* linear precoder W with tr(W^H W) = 1 and rank(W) <= rank, whether
+    or not that precoder's layers are mutually orthogonal or equal-power.
+
+    ``eigen_precoder`` + ``su_rate`` (equal power split across the top
+    ``rank`` singular directions) is a valid *achievable* rate, not this
+    supremum: for a fixed subspace, equal power is generally suboptimal
+    versus waterfilling, so a codebook precoder with non-orthogonal or
+    unequal-power layers can occasionally beat the equal-power reference
+    without beating this one. H: (..., Nr, P) -> mean capacity (bits/s/Hz)
+    over all leading-axis instances, matching ``su_rate``'s return convention.
+    """
+    H = np.asarray(H)
+    svals = np.linalg.svd(H, compute_uv=False)  # (..., min(Nr, P))
+    r = min(rank, svals.shape[-1])
+    lam2 = np.clip(svals[..., :r] ** 2, 1e-12, None).reshape(-1, r)
+    total = 0.0
+    for gains in lam2:
+        p = water_filling(gains, rho)
+        total += float(np.sum(np.log2(1 + p * gains)))
+    return total / lam2.shape[0]
+
+
 def svd_precoder(H: np.ndarray, n_streams: int) -> np.ndarray:
     """SVD beamforming for a single (Nr, Nt) channel: W = [V]_{:,1:Ns}."""
     _, _, Vh = np.linalg.svd(H, full_matrices=False)

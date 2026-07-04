@@ -148,6 +148,11 @@ lives in the Figure Lab — playground must stay TensorFlow-free and fast).
   "metrics": {
     "sgcs": 0.93, "subspace_sgcs": 0.95,
     "snr_db": [...], "se": [...], "se_upper_bound": [...],
+    "capacity_upper_bound": [...],   // true waterfilling supremum (see eval/harness.py); se
+                                     // should never exceed this one, unlike se_upper_bound
+                                     // (equal-power eigen beamforming -- merely *an* achievable
+                                     // rate, not a strict upper bound for non-orthogonal or
+                                     // unequal-power rank>1 codebook precoders)
     "overhead_bits": {"i11 q1,q2": 4, ...},    // scheme.overhead_bits(pmi) of the last drop
     "total_bits": 289 },
   "pmi": { "fields": [ {"name": "i11", "value": "…summarised…", "bits": 4,

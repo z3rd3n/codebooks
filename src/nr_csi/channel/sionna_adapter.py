@@ -2,12 +2,16 @@
 
 Maps a Sionna CDL downlink channel onto the framework's port/subband grid:
 
-    H[slot, t, rx, port],  port = pol * N1*N2 + n1 * N2 + n2
+    H[slot, t, rx, port],  port = panel * 2*N1*N2 + pol * N1*N2 + n1 * N2 + n2
 
 with n1 horizontal (columns), n2 vertical (rows) -- the ordering assumed by
-the spatial DFT bases in :mod:`nr_csi.utils.dft`.  The permutation from
-Sionna's internal antenna numbering is derived from the panel's antenna
-positions, so it does not depend on Sionna's enumeration conventions.
+the spatial DFT bases in :mod:`nr_csi.utils.dft` -- and panels (Ng > 1, e.g.
+``type1-mp``/``refined-type1mp-r19``) laid out as a single row of co-located
+sub-arrays, matching the panel-major port layout the multi-panel codebooks
+build in ``Type1MultiPanelCodebook``/``RefinedType1MultiPanelCodebook``. The
+permutation from Sionna's internal antenna numbering is derived from the
+panel's antenna positions, so it does not depend on Sionna's enumeration
+conventions.
 
 Time axis: ``generate(n_slots)`` samples one channel snapshot per PMI slot
 interval (duration ``interval_duration`` seconds), which is the granularity
@@ -96,6 +100,8 @@ class SionnaCDLChannel(ChannelSource):
             polarization_type="cross",
             antenna_pattern="38.901",
             carrier_frequency=carrier_frequency,
+            num_rows=1,
+            num_cols=antenna.Ng,
         )
         ut_array = PanelArray(
             num_rows_per_panel=1,
@@ -122,18 +128,27 @@ class SionnaCDLChannel(ChannelSource):
     def _port_permutation(self, bs_array) -> np.ndarray:
         """Permutation p such that H[..., sionna_ant[p[k]]] is our port k.
 
-        Our port k = pol * N1*N2 + n1 * N2 + n2; antennas of one polarization
-        are ordered by horizontal position (y) first, vertical (z) fastest.
+        Our port k = panel * 2*N1*N2 + pol * N1*N2 + n1 * N2 + n2. Within one
+        panel and polarization, antennas are ordered by horizontal position
+        (y) first, vertical (z) fastest. Sionna's ``ant_ind_pol{1,2}`` are
+        already segmented into ``Ng`` contiguous per-panel blocks of
+        ``N1*N2`` (a pure indexing artifact of how ``PanelArray`` composes
+        panels, independent of panel spacing/geometry), so each panel is
+        sorted independently to keep panels from being interleaved by the
+        sort when their physical extents are close together.
         """
+        Ng = self.antenna.Ng
+        npp = self.antenna.n_ports_per_pol
         pos = np.asarray(bs_array.ant_pos)  # (num_ant, 3), columns (x, y, z)
-        ind_p1 = np.asarray(bs_array.ant_ind_pol1).ravel()
-        ind_p2 = np.asarray(bs_array.ant_ind_pol2).ravel()
+        ind_p1 = np.asarray(bs_array.ant_ind_pol1).ravel().reshape(Ng, npp)
+        ind_p2 = np.asarray(bs_array.ant_ind_pol2).ravel().reshape(Ng, npp)
         perm = []
-        for ind in (ind_p1, ind_p2):
-            p = pos[ind]
-            # sort by horizontal (y) then vertical (z): vertical index fastest
-            order = np.lexsort((p[:, 2], p[:, 1]))
-            perm.extend(ind[order].tolist())
+        for panel in range(Ng):
+            for ind in (ind_p1[panel], ind_p2[panel]):
+                p = pos[ind]
+                # sort by horizontal (y) then vertical (z): vertical index fastest
+                order = np.lexsort((p[:, 2], p[:, 1]))
+                perm.extend(ind[order].tolist())
         return np.asarray(perm)
 
     def _generate_core(self, batch_size: int, n_slots: int) -> np.ndarray:

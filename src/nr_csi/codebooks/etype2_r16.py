@@ -221,6 +221,24 @@ class R16Type2Codebook(CodebookScheme):
                 f"L={self.L} beams cannot be drawn from an orthogonal group of "
                 f"N1*N2={antenna.n_ports_per_pol} beams"
             )
+        if port_selection and self.L > antenna.n_ports_per_pol:
+            # basis_ps()'s v_m uses "m mod P_CSI-RS/2" (TS 38.214 Table 5.2.2.2.6-2),
+            # so when L exceeds the number of ports per polarization, distinct beam
+            # indices i alias onto the same physical port and the LS fit assigns them
+            # *identical* coefficients (same projection target). gamma_{t,l} sums
+            # |coefficient|^2 per beam index as if the L basis vectors were orthogonal,
+            # undercounting the coherent sum at the aliased port -- e.g. L=4 at P=4
+            # (2 ports/pol) makes every port carry two identical copies of the same
+            # coefficient, so the true precoder power comes out exactly 2x too high.
+            # The base Type II PS codebook (38.214 5.2.2.2.4) avoids this by pinning
+            # L=2 whenever P_CSI-RS=4; the eType II PS table (5.2.2.2.6-1) has no such
+            # bar, so it must be enforced here.
+            raise ValueError(
+                f"paramCombination-r16={self.combo.index} needs L={self.L} port-selection "
+                f"vectors but only P_CSI-RS/2={antenna.n_ports_per_pol} ports per "
+                f"polarization are configured; this would alias distinct beam indices "
+                f"onto the same physical port and break the gamma_{{t,l}} normalization"
+            )
         self.d = d
         if restriction is not None:
             if port_selection:

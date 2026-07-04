@@ -1,5 +1,6 @@
 from .ideal import (
     bd,
+    capacity_upper_bound,
     eigen_precoder,
     ezf,
     gmd,
@@ -26,4 +27,5 @@ __all__ = [
     "wmmse",
     "water_filling",
     "harmonic_mean_allocation",
+    "capacity_upper_bound",
 ]

@@ -34,10 +34,17 @@ class TestConstructorGuards:
         with pytest.raises(ValueError, match="P_CSI-RS=4"):
             R16Type2Codebook(SMALL, N3=4, param_combination=3)  # L = 4
 
-    def test_r16_ps_large_l_allowed(self):
-        """Port selection draws from P/2 ports, not the N1*N2 beam group --
-        the d <= min(P/2, L) rule is the binding constraint instead."""
-        R16Type2Codebook(SMALL, N3=4, param_combination=3, port_selection=True, d=2)
+    def test_r16_ps_l_exceeds_ports_per_pol(self):
+        """L=4 port-selection vectors alias onto SMALL's 2 ports/polarization
+        (v_m's "m mod P_CSI-RS/2" wraparound, Table 5.2.2.2.6-2): two of the four
+        beam indices land on the same physical port and get identical LS-fitted
+        coefficients, so gamma_{t,l} (which sums |coefficient|^2 per beam index as
+        if they were orthogonal) undercounts the coherent sum at that port and the
+        precoder comes out at exactly 2x its intended power. The base Type II PS
+        codebook (38.214 5.2.2.2.4) avoids this by pinning L=2 when P_CSI-RS=4;
+        the eType II PS table has no such bar, so the constructor must enforce it."""
+        with pytest.raises(ValueError, match="ports per polarization"):
+            R16Type2Codebook(SMALL, N3=4, param_combination=3, port_selection=True, d=2)
 
     def test_r18_l_exceeds_group_size(self):
         with pytest.raises(ValueError, match="orthogonal group"):

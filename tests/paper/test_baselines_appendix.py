@@ -7,6 +7,8 @@ import pytest
 
 from nr_csi.baselines import (
     bd,
+    capacity_upper_bound,
+    eigen_precoder,
     ezf,
     gmd,
     harmonic_mean_allocation,
@@ -14,7 +16,7 @@ from nr_csi.baselines import (
     wmmse,
     zf,
 )
-from nr_csi.metrics.se import mu_rate
+from nr_csi.metrics.se import mu_rate, su_rate
 
 
 def rand_channel(rng, *shape):
@@ -196,6 +198,53 @@ class TestPowerAllocation:
         # resulting per-stream SNRs P_i*lambda_i^2 = beta*lambda_i
         snrs = p * gains
         assert snrs[0] > snrs[1]
+
+
+class TestCapacityUpperBound:
+    """capacity_upper_bound (waterfilling over the top-`rank` singular
+    values) is the true supremum over ANY tr(W^H W)=1, rank(W)<=rank linear
+    precoder -- unlike eigen_precoder + su_rate (equal power on the same
+    subspace, merely *an* achievable rate), so it must always dominate,
+    even for precoders whose layers are non-orthogonal or unequal-power."""
+
+    def test_siso_closed_form(self):
+        H = np.array([[[2.0 + 0j, 0, 0, 0]]])  # (N3=1, Nr=1, P=4)
+        rho = 5.0
+        cap = capacity_upper_bound(H, rank=1, rho=rho)
+        assert np.isclose(cap, np.log2(1 + rho * 4.0))
+
+    def test_matches_water_filling_over_singular_values(self):
+        rng = np.random.default_rng(1)
+        H = rand_channel(rng, 3, 4)  # (Nr=3, P=4)
+        rank, rho = 2, 8.0
+        cap = capacity_upper_bound(H[None], rank=rank, rho=rho)
+        svals = np.linalg.svd(H, compute_uv=False)[:rank]
+        p = water_filling(svals**2, rho)
+        expected = np.sum(np.log2(1 + p * svals**2))
+        assert np.isclose(cap, expected)
+
+    @pytest.mark.parametrize("trial", range(50))
+    def test_dominates_equal_power_eigen_reference(self, trial):
+        """For any channel/rank/SNR, waterfilling on the top-rank subspace
+        can never do worse than equal-power on the same subspace."""
+        rng = np.random.default_rng(trial)
+        Nr, P = rng.integers(2, 5), rng.integers(4, 17)
+        rank = int(rng.integers(1, min(Nr, P) + 1))
+        H = rand_channel(rng, 3, Nr, P)  # (N3=3, Nr, P)
+        rho = 10 ** (rng.uniform(-10, 30) / 10)
+        W_ref = eigen_precoder(H, rank=rank)
+        eq_rate = su_rate(H, W_ref, rho)
+        cap = capacity_upper_bound(H, rank, rho)
+        assert cap >= eq_rate - 1e-9
+
+    def test_rank_capped_at_available_singular_values(self):
+        """rank > min(Nr, P) silently caps at the available stream count
+        instead of erroring (mirrors eigen_precoder's own [:rank] slice)."""
+        rng = np.random.default_rng(2)
+        H = rand_channel(rng, 1, 2, 4)  # only 2 singular values available
+        cap_r2 = capacity_upper_bound(H, rank=2, rho=10.0)
+        cap_r8 = capacity_upper_bound(H, rank=8, rho=10.0)
+        assert np.isclose(cap_r2, cap_r8)
 
 
 class TestAutoRank:

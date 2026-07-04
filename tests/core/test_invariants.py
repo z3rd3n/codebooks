@@ -48,6 +48,18 @@ def make_schemes(ant: AntennaConfig):
         (R15Type2Codebook(ant, N3=N3, L=2), validate_r15),
         (R15Type2Codebook(ant, N3=N3, L=2, port_selection=True, d=2), validate_r15),
         (R16Type2Codebook(ant, N3=N3, param_combination=2), validate_r16),
+        # port-selection: L must not exceed ports-per-polarization (else the
+        # v_m = 1{m mod P/2} basis aliases distinct beam indices onto the same
+        # physical port); combo 2 (L=2) always fits, combo 4 (L=4) only fits
+        # when P > 4.
+        (
+            R16Type2Codebook(
+                ant, N3=N3,
+                param_combination=2 if ant.n_ports_per_pol <= 2 else 4,
+                port_selection=True, d=1,
+            ),
+            validate_r16,
+        ),
         # combo 5 at P = 4 requires ranks 3-4 disallowed (5.2.2.2.7); the
         # tests here use ranks 1-2 only.
         (

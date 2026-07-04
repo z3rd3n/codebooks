@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..baselines.ideal import eigen_precoder
+from ..baselines.ideal import capacity_upper_bound, eigen_precoder
 from ..channel.base import ChannelSource
 from ..codebooks.base import CodebookScheme
 from ..metrics.se import su_rate
@@ -24,11 +24,12 @@ class EvalResult:
     scheme: str
     snr_db: list[float]
     se: list[float]  # mean SE per SNR point (bits/s/Hz)
-    se_upper_bound: list[float]  # per-interval eigen beamforming
+    se_upper_bound: list[float]  # per-interval eigen beamforming (equal power, achievable)
     sgcs: float  # mean SGCS vs per-interval eigen targets
     overhead_bits: float  # mean feedback bits per report
     per_drop_sgcs: list[float] = field(default_factory=list)
     subspace_sgcs: float = 0.0  # rotation-invariant companion of sgcs
+    capacity_upper_bound: list[float] = field(default_factory=list)  # true waterfilling supremum
 
 
 def _add_measurement_noise(
@@ -84,6 +85,7 @@ def evaluate(
         raise ValueError(f"measurement_slots {m} < n_slots {n_slots}")
     se = np.zeros(len(rhos))
     se_ub = np.zeros(len(rhos))
+    se_cap_ub = np.zeros(len(rhos))
     sgcs_vals = []
     subspace_vals = []
     bits = []
@@ -115,6 +117,7 @@ def evaluate(
         for i, rho in enumerate(rhos):
             se[i] += su_rate(H, W_all, rho)
             se_ub[i] += su_rate(H, W_ref, rho)
+            se_cap_ub[i] += capacity_upper_bound(H, rank, rho)
     return EvalResult(
         scheme=scheme.name,
         snr_db=snr_db,
@@ -124,6 +127,7 @@ def evaluate(
         overhead_bits=float(np.mean(bits)),
         per_drop_sgcs=[float(x) for x in sgcs_vals],
         subspace_sgcs=float(np.mean(subspace_vals)),
+        capacity_upper_bound=list(se_cap_ub / n_drops),
     )
 
 

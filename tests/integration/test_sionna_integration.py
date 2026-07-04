@@ -10,7 +10,9 @@ from nr_csi.channel.sionna_adapter import SionnaCDLChannel
 from nr_csi.codebooks.etype2_r16 import R16Type2Codebook
 from nr_csi.codebooks.etype2_r18 import R18Type2Codebook
 from nr_csi.codebooks.fetype2_r17 import R17Type2Codebook
+from nr_csi.codebooks.refined_type1mp_r19 import RefinedType1MultiPanelCodebook
 from nr_csi.codebooks.type1 import Type1Codebook
+from nr_csi.codebooks.type1_multipanel import Type1MultiPanelCodebook
 from nr_csi.codebooks.type2_r15 import R15Type2Codebook
 from nr_csi.config import AntennaConfig
 from nr_csi.eval import evaluate
@@ -111,6 +113,54 @@ def test_port_permutation_matches_panel_geometry():
                 assert ant in pol_sets[pol], f"port {k} not in polarization {pol}"
                 assert np.isclose(pos[ant, 1], ys[n1]), f"port {k}: wrong column"
                 assert np.isclose(pos[ant, 2], zs[n2]), f"port {k}: wrong row"
+
+
+def test_multipanel_port_permutation_is_panel_major():
+    """For Ng>1, port k = panel*2*N1*N2 + pol*N1*N2 + n1*N2+n2 (panel-major,
+    then polarization-major -- the layout Type1MultiPanelCodebook/
+    RefinedType1MultiPanelCodebook build). Each panel's block must land on a
+    physically distinct, non-overlapping group of antennas of the right
+    polarization and (n1, n2) position within that panel."""
+    ant = AntennaConfig.standard(2, 2, Ng=2)
+    chan = SionnaCDLChannel(ant, N3=4, model="D", n_rx=1)
+    pos = np.asarray(chan.bs_array.ant_pos)
+    perm = chan._port_perm
+    npp = ant.N1 * ant.N2
+    pol_sets = [
+        set(np.asarray(chan.bs_array.ant_ind_pol1).ravel().tolist()),
+        set(np.asarray(chan.bs_array.ant_ind_pol2).ravel().tolist()),
+    ]
+    panel_y_ranges = []
+    for panel in range(ant.Ng):
+        block = perm[panel * 2 * npp : (panel + 1) * 2 * npp]
+        panel_y_ranges.append((pos[block, 1].min(), pos[block, 1].max()))
+        for pol in (0, 1):
+            pol_block = block[pol * npp : (pol + 1) * npp]
+            assert all(a in pol_sets[pol] for a in pol_block)
+        ys = np.unique(np.round(pos[block[:npp], 1], 9))
+        zs = np.unique(np.round(pos[block[:npp], 2], 9))
+        assert len(ys) == ant.N1 and len(zs) == ant.N2
+    # panels must not spatially overlap
+    (lo0, hi0), (lo1, hi1) = panel_y_ranges
+    assert hi0 < lo1 or hi1 < lo0
+
+
+def test_multipanel_codebooks_run_end_to_end():
+    """Previously: PanelArray was built with no Ng, so P didn't match the
+    channel's port count and generation raised deep inside Sionna/einsum."""
+    ant1 = AntennaConfig.standard(2, 2, Ng=2)  # R15 Table 5.2.2.2.2-1
+    ant2 = AntennaConfig.standard(4, 3, Ng=2)  # R19 Table 5.2.2.2.2a-1
+    for ant, cbk in (
+        (ant1, Type1MultiPanelCodebook(ant1, N3=4, mode=1)),
+        (ant2, RefinedType1MultiPanelCodebook(ant2, N3=4)),
+    ):
+        chan = SionnaCDLChannel(ant, N3=4, model="A", n_rx=2, ue_speed_kmh=3.0)
+        H = chan.generate(n_slots=1)
+        assert H.shape == (1, 4, 2, ant.P)
+        pmi = cbk.select(H, rank=2)
+        W = cbk.precoder(pmi)
+        assert np.all(np.isfinite(W))
+        assert W.shape == (1, 4, ant.P, 2)
 
 
 def test_r18_tracks_mobility_better_than_held_r16():

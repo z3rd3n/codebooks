@@ -475,6 +475,7 @@ def run_playground(req: dict) -> dict:
 
     se_at_10 = _interp_at(snr_db, result.se, 10.0)
     bound_at_10 = _interp_at(snr_db, result.se_upper_bound, 10.0)
+    capacity_at_10 = _interp_at(snr_db, result.capacity_upper_bound, 10.0)
 
     return {
         "ok": True,
@@ -488,10 +489,16 @@ def run_playground(req: dict) -> dict:
             "snr_db": snr_db,
             "se": _round_list(np.array(result.se)),
             "se_upper_bound": _round_list(np.array(result.se_upper_bound)),
+            # true waterfilling supremum over any tr(W^H W)=1, rank<=r precoder --
+            # unlike se_upper_bound (equal power on the top-r eigen directions,
+            # merely *an* achievable rate), this always dominates se, even for
+            # codebooks with non-orthogonal or unequal-power rank>1 layers.
+            "capacity_upper_bound": _round_list(np.array(result.capacity_upper_bound)),
             "overhead_bits": {k: int(v) for k, v in overhead.items()},
             "total_bits": total_bits,
             "se_at_10db": se_at_10,
             "bound_at_10db": bound_at_10,
+            "capacity_at_10db": capacity_at_10,
         },
         "pmi": summarize_pmi(scheme, pmi),
         "viz": {
