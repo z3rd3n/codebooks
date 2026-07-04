@@ -1,5 +1,8 @@
 import { useState } from "react";
-import type { ChannelConfig } from "../../api/types";
+import type { ChannelConfig, Meta } from "../../api/types";
+import { api } from "../../api/client";
+import { useApiData } from "../../hooks/useApiData";
+import { Icon } from "../Icon";
 
 interface ChannelPreset {
   id: string;
@@ -35,6 +38,8 @@ const PRESETS: ChannelPreset[] = [
   },
 ];
 
+const CDL_MODELS = ["A", "B", "C", "D", "E"];
+
 interface ChannelPickerProps {
   value: ChannelConfig;
   onChange: (channel: ChannelConfig) => void;
@@ -43,17 +48,39 @@ interface ChannelPickerProps {
 }
 
 export function ChannelPicker({ value, onChange, nRx, onNRxChange }: ChannelPickerProps) {
+  const meta = useApiData<Meta>(() => api.meta(), []);
+  const sionnaAvailable = meta.data?.sionna_available ?? false;
+
+  const kind: "synthetic" | "cdl" = value.type === "cdl" ? "cdl" : "synthetic";
   const activePresetId = value.preset ?? null;
   const [customOpen, setCustomOpen] = useState(activePresetId === null || activePresetId === "custom");
 
+  function switchKind(next: "synthetic" | "cdl") {
+    if (next === kind) return;
+    if (next === "cdl") {
+      if (!sionnaAvailable) return;
+      onChange({
+        ...value,
+        type: "cdl",
+        cdl_model: value.cdl_model ?? "C",
+        cdl_speed_kmh: value.cdl_speed_kmh ?? 3.0,
+        cdl_delay_spread_ns: value.cdl_delay_spread_ns ?? 100.0,
+      });
+    } else {
+      onChange({ ...value, type: "synthetic", preset: value.preset ?? "sparse-urban" });
+    }
+  }
+
   function selectPreset(preset: ChannelPreset) {
-    onChange({ preset: preset.id, ...preset.config });
+    onChange({ ...value, type: "synthetic", preset: preset.id, ...preset.config });
     setCustomOpen(false);
   }
 
   function openCustom() {
     setCustomOpen(true);
     onChange({
+      ...value,
+      type: "synthetic",
       preset: "custom",
       n_paths: value.n_paths ?? 4,
       max_delay: value.max_delay ?? 3.0,
@@ -63,69 +90,149 @@ export function ChannelPicker({ value, onChange, nRx, onNRxChange }: ChannelPick
 
   return (
     <div className="col col-gap-3">
-      <div className="choice-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
-        {PRESETS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`choice-card${activePresetId === p.id && !customOpen ? " selected" : ""}`}
-            onClick={() => selectPreset(p)}
-            aria-pressed={activePresetId === p.id && !customOpen}
-          >
-            <span className="choice-card-label">{p.label}</span>
-            <span className="choice-card-desc">{p.description}</span>
-          </button>
-        ))}
+      <div className="segmented">
         <button
           type="button"
-          className={`choice-card${customOpen ? " selected" : ""}`}
-          onClick={openCustom}
-          aria-pressed={customOpen}
+          className={`segmented-btn${kind === "synthetic" ? " active" : ""}`}
+          onClick={() => switchKind("synthetic")}
         >
-          <span className="choice-card-label">Custom</span>
-          <span className="choice-card-desc">Set paths, delay spread, and Doppler manually.</span>
+          Synthetic multipath
+        </button>
+        <button
+          type="button"
+          className={`segmented-btn${kind === "cdl" ? " active" : ""}`}
+          onClick={() => switchKind("cdl")}
+          disabled={!sionnaAvailable}
+          title={
+            sionnaAvailable
+              ? undefined
+              : "Sionna (TensorFlow) is not installed on this server. Install the optional sionna extra to use 3GPP CDL channels."
+          }
+        >
+          3GPP CDL (Sionna) {!sionnaAvailable && <Icon name="info" size={12} />}
         </button>
       </div>
 
-      {customOpen && (
-        <div className="grid-3">
-          <div className="field">
-            <label className="field-label" htmlFor="ch-npaths">Number of paths</label>
-            <input
-              id="ch-npaths"
-              className="input"
-              type="number"
-              min={1}
-              max={32}
-              value={value.n_paths ?? 4}
-              onChange={(e) => onChange({ ...value, preset: "custom", n_paths: parseInt(e.target.value, 10) || 1 })}
-            />
+      {kind === "synthetic" ? (
+        <>
+          <div className="choice-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+            {PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`choice-card${activePresetId === p.id && !customOpen ? " selected" : ""}`}
+                onClick={() => selectPreset(p)}
+                aria-pressed={activePresetId === p.id && !customOpen}
+              >
+                <span className="choice-card-label">{p.label}</span>
+                <span className="choice-card-desc">{p.description}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`choice-card${customOpen ? " selected" : ""}`}
+              onClick={openCustom}
+              aria-pressed={customOpen}
+            >
+              <span className="choice-card-label">Custom</span>
+              <span className="choice-card-desc">Set paths, delay spread, and Doppler manually.</span>
+            </button>
           </div>
-          <div className="field">
-            <label className="field-label" htmlFor="ch-delay">Max delay spread</label>
-            <input
-              id="ch-delay"
-              className="input"
-              type="number"
-              step={0.1}
-              min={0}
-              value={value.max_delay ?? 3.0}
-              onChange={(e) => onChange({ ...value, preset: "custom", max_delay: parseFloat(e.target.value) || 0 })}
-            />
+
+          {customOpen && (
+            <div className="grid-3">
+              <div className="field">
+                <label className="field-label" htmlFor="ch-npaths">Number of paths</label>
+                <input
+                  id="ch-npaths"
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={32}
+                  value={value.n_paths ?? 4}
+                  onChange={(e) =>
+                    onChange({ ...value, type: "synthetic", preset: "custom", n_paths: parseInt(e.target.value, 10) || 1 })
+                  }
+                />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="ch-delay">Max delay spread</label>
+                <input
+                  id="ch-delay"
+                  className="input"
+                  type="number"
+                  step={0.1}
+                  min={0}
+                  value={value.max_delay ?? 3.0}
+                  onChange={(e) =>
+                    onChange({ ...value, type: "synthetic", preset: "custom", max_delay: parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="ch-doppler">Max Doppler</label>
+                <input
+                  id="ch-doppler"
+                  className="input"
+                  type="number"
+                  step={0.05}
+                  min={0}
+                  value={value.max_doppler ?? 0.0}
+                  onChange={(e) =>
+                    onChange({ ...value, type: "synthetic", preset: "custom", max_doppler: parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="grid-3">
+            <div className="field">
+              <label className="field-label" htmlFor="cdl-model">CDL model</label>
+              <select
+                id="cdl-model"
+                className="select"
+                value={value.cdl_model ?? "C"}
+                onChange={(e) => onChange({ ...value, type: "cdl", cdl_model: e.target.value })}
+              >
+                {CDL_MODELS.map((m) => (
+                  <option key={m} value={m}>CDL-{m}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="cdl-speed">UE speed (km/h)</label>
+              <input
+                id="cdl-speed"
+                className="input"
+                type="number"
+                min={0}
+                value={value.cdl_speed_kmh ?? 3.0}
+                onChange={(e) => onChange({ ...value, type: "cdl", cdl_speed_kmh: parseFloat(e.target.value) || 0 })}
+              />
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="cdl-ds">Delay spread (ns)</label>
+              <input
+                id="cdl-ds"
+                className="input"
+                type="number"
+                min={1}
+                value={value.cdl_delay_spread_ns ?? 100.0}
+                onChange={(e) =>
+                  onChange({ ...value, type: "cdl", cdl_delay_spread_ns: parseFloat(e.target.value) || 1 })
+                }
+              />
+            </div>
           </div>
-          <div className="field">
-            <label className="field-label" htmlFor="ch-doppler">Max Doppler</label>
-            <input
-              id="ch-doppler"
-              className="input"
-              type="number"
-              step={0.05}
-              min={0}
-              value={value.max_doppler ?? 0.0}
-              onChange={(e) => onChange({ ...value, preset: "custom", max_doppler: parseFloat(e.target.value) || 0 })}
-            />
-          </div>
-        </div>
+          <p className="text-sm text-muted" style={{ marginTop: -4 }}>
+            The first CDL run on this server loads TensorFlow and can take up to a minute; later runs
+            are faster, but still slower than the synthetic channel. Not available for the CJT
+            codebook yet.
+          </p>
+        </>
       )}
 
       <div className="field" style={{ maxWidth: 220 }}>

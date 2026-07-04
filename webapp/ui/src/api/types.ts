@@ -173,12 +173,16 @@ export interface GlossaryTerm {
 // ---------------------------------------------------------------------------
 
 export interface ChannelConfig {
+  type?: "synthetic" | "cdl" | null;
   preset?: string | null;
   n_rx?: number;
   n_paths?: number;
   max_delay?: number;
   max_doppler?: number;
   inter_trp_delay?: number;
+  cdl_model?: string;
+  cdl_speed_kmh?: number;
+  cdl_delay_spread_ns?: number;
 }
 
 export interface AntennaConfig {

@@ -87,7 +87,7 @@ export function AntennaPicker({ spec, value, onChange }: AntennaPickerProps) {
               <div>
                 <div className="choice-card-label">
                   {p.n1}&times;{p.n2}
-                  {p.ng ? ` &times;${p.ng}` : ""}
+                  {p.ng ? ` ×${p.ng} panels` : ""}
                 </div>
                 <div className="choice-card-desc">{p.ports} ports</div>
               </div>

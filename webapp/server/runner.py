@@ -7,6 +7,8 @@ single drop with the request seed to produce the PMI/viz payloads.
 from __future__ import annotations
 
 import dataclasses
+import importlib.util
+import threading
 from typing import Any
 
 import numpy as np
@@ -28,6 +30,17 @@ CHANNEL_PRESETS: dict[str, dict] = {
 
 DOPPLER_IDS = {"etype2-doppler-r18", "predicted-ps-r18"}
 
+CDL_NO_SIONNA_MSG = (
+    "3GPP CDL channels need the optional `sionna` extra, which isn't installed on "
+    'this server. Use the synthetic channel instead, or install it with '
+    '`pip install -e ".[sionna]"`.'
+)
+CDL_CJT_UNSUPPORTED_MSG = (
+    "3GPP CDL isn't available yet for the CJT codebook — it needs per-transmission-"
+    "point CDL channels that aren't implemented in this app. Use the synthetic "
+    "channel instead."
+)
+
 
 class ValidationError(ValueError):
     """A friendly, already-formatted error to surface as a 400."""
@@ -38,19 +51,70 @@ def resolve_channel_cfg(channel_req: dict | None, codebook_id: str) -> dict:
     channel_req = dict(channel_req or {})
     preset = channel_req.get("preset")
     default_doppler = 0.5 if codebook_id in DOPPLER_IDS else 0.0
+    # Doppler/predicted codebooks need genuine movement to show anything; match
+    # the "fast" regime the Doppler figure scripts already use for CDL speed.
+    default_cdl_speed = 30.0 if codebook_id in DOPPLER_IDS else 3.0
     cfg = {
+        "type": "synthetic",
         "n_rx": 2,
         "n_paths": 4,
         "max_delay": 3.0,
         "max_doppler": default_doppler,
+        "cdl_model": "C",
+        "cdl_speed_kmh": default_cdl_speed,
+        "cdl_delay_spread_ns": 100.0,
     }
     if preset and preset in CHANNEL_PRESETS:
         cfg.update(CHANNEL_PRESETS[preset])
-    for key in ("n_rx", "n_paths", "max_delay", "max_doppler"):
+    for key in ("type", "n_rx", "n_paths", "max_delay", "max_doppler",
+                "cdl_model", "cdl_speed_kmh", "cdl_delay_spread_ns"):
         if key in channel_req and channel_req[key] is not None:
             cfg[key] = channel_req[key]
     cfg["inter_trp_delay"] = float(channel_req.get("inter_trp_delay", 0.5))
     return cfg
+
+
+# ------------------------------------------------------------------------ CDL
+
+# Playground/Compare run in the same process (unlike Figure Lab, which isolates
+# each run in its own subprocess), so concurrent requests could otherwise drive
+# TensorFlow from multiple threads at once. This serializes all CDL channel
+# construction/generation to keep that safe.
+_SIONNA_LOCK = threading.Lock()
+
+
+class _LockedChannel:
+    """Wraps a channel so every ``generate()`` call is serialized."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self.N3 = inner.N3
+        self.n_rx = inner.n_rx
+        self.n_ports = inner.n_ports
+
+    def generate(self, n_slots: int = 1, rng: np.random.Generator | None = None):
+        with _SIONNA_LOCK:
+            return self._inner.generate(n_slots=n_slots, rng=rng)
+
+
+def _build_cdl_channel(antenna: AntennaConfig, n3: int, chan_cfg: dict) -> "_LockedChannel":
+    if importlib.util.find_spec("sionna") is None:
+        raise ValidationError(CDL_NO_SIONNA_MSG)
+    from nr_csi.channel.sionna_adapter import SionnaCDLChannel
+
+    n_rx = int(chan_cfg["n_rx"])
+    model = str(chan_cfg.get("cdl_model", "C"))
+    speed = float(chan_cfg.get("cdl_speed_kmh", 3.0))
+    ds_ns = float(chan_cfg.get("cdl_delay_spread_ns", 100.0))
+    try:
+        with _SIONNA_LOCK:
+            inner = SionnaCDLChannel(
+                antenna, N3=n3, model=model, n_rx=n_rx,
+                ue_speed_kmh=speed, delay_spread=ds_ns * 1e-9,
+            )
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    return _LockedChannel(inner)
 
 
 def _build_antenna(entry: catalog.CatalogEntry, req: dict) -> AntennaConfig:
@@ -112,6 +176,10 @@ def instantiate(entry: catalog.CatalogEntry, req: dict):
 def _channel_for(
     entry: catalog.CatalogEntry, scheme, antenna: AntennaConfig, n3: int, chan_cfg: dict
 ):
+    if chan_cfg.get("type") == "cdl":
+        if entry.id == "cjt-r18":
+            raise ValidationError(CDL_CJT_UNSUPPORTED_MSG)
+        return _build_cdl_channel(antenna, n3, chan_cfg)
     if entry.id == "cjt-r18":
         return _cjt_channel(scheme, antenna, n3, chan_cfg, chan_cfg["inter_trp_delay"])
     n_rx = int(chan_cfg["n_rx"])
@@ -136,6 +204,14 @@ def validate_request(req: dict) -> None:
     lo, hi = _rank_bounds(entry)
     if not lo <= rank <= hi:
         raise ValidationError(f"rank {rank} outside this codebook's supported range [{lo}, {hi}]")
+
+    # Cheap CDL checks (no TensorFlow import, no model construction) so the
+    # debounced auto-validate can still catch these instantly.
+    if (req.get("channel") or {}).get("type") == "cdl":
+        if importlib.util.find_spec("sionna") is None:
+            raise ValidationError(CDL_NO_SIONNA_MSG)
+        if entry.id == "cjt-r18":
+            raise ValidationError(CDL_CJT_UNSUPPORTED_MSG)
 
 
 # ------------------------------------------------------------------- decimate
@@ -277,17 +353,30 @@ def build_python_snippet(
 
     factory_name = entry.factory.__name__
 
+    if chan_cfg.get("type") == "cdl":
+        channel_import = "from nr_csi.channel.sionna_adapter import SionnaCDLChannel"
+        channel_line = (
+            f"channel = SionnaCDLChannel(antenna, N3={n3}, model={chan_cfg.get('cdl_model', 'C')!r}, "
+            f"n_rx={int(chan_cfg['n_rx'])}, ue_speed_kmh={chan_cfg.get('cdl_speed_kmh', 3.0)}, "
+            f"delay_spread={chan_cfg.get('cdl_delay_spread_ns', 100.0)}e-9)  # needs the `sionna` extra"
+        )
+    else:
+        channel_import = "from nr_csi.channel.synthetic import RandomRayChannel"
+        channel_line = (
+            f"channel = RandomRayChannel(antenna, N3={n3}, n_rx={int(chan_cfg['n_rx'])}, "
+            f"n_paths={int(chan_cfg['n_paths'])}, max_delay={chan_cfg['max_delay']}, "
+            f"max_doppler={chan_cfg['max_doppler']})"
+        )
+
     lines = [
         "from nr_csi.config import AntennaConfig",
-        "from nr_csi.channel.synthetic import RandomRayChannel",
+        channel_import,
         "from nr_csi.eval.harness import evaluate",
         f"# codebook: {entry.id} ({entry.name})",
         "# (constructor call mirrors webapp/server/catalog.py's factory for this entry)",
         "",
         ant_line,
-        f"channel = RandomRayChannel(antenna, N3={n3}, n_rx={int(chan_cfg['n_rx'])}, "
-        f"n_paths={int(chan_cfg['n_paths'])}, max_delay={chan_cfg['max_delay']}, "
-        f"max_doppler={chan_cfg['max_doppler']})",
+        channel_line,
         f"# params = {params!r}",
         f"# scheme = <{entry.id} factory>(antenna, N3={n3}, params)"
         f"  # see catalog.py:{factory_name}",

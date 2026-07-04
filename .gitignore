@@ -7,3 +7,4 @@ __pycache__/
 # Generated CDL datasets (sharded HDF5 + manifest/audit artifacts)
 data/
 results/webapp_dataset/
+results/exhaustive_sweep/
