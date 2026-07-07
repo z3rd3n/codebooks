@@ -27,6 +27,30 @@ def su_rate(H: np.ndarray, W: np.ndarray, rho: float) -> float:
     return float(np.mean(rates))
 
 
+def su_rate_mmse(H: np.ndarray, W: np.ndarray, rho: float) -> float:
+    """Mean single-user rate with a per-layer linear MMSE receiver.
+
+    Same signature/conventions as ``su_rate`` but each of the v layers is
+    detected by a linear MMSE filter treating the other layers as noise
+    (no joint decoding, no SIC) -- the receiver real link adaptation
+    assumes.  Per layer
+        SINR_l = 1 / [(I + rho G^H G)^{-1}]_{ll} - 1,   G = H W,
+    and the rate is sum_l log2(1 + SINR_l).  Always <= ``su_rate`` (Fischer's
+    inequality), with equality iff the effective layers G are orthogonal --
+    so the gap isolates the inter-layer leakage a codebook's non-orthogonal
+    layers cost on a real receiver.
+    """
+    H, W = np.asarray(H), np.asarray(W)
+    HW = H @ W  # (..., Nr, v)
+    v = W.shape[-1]
+    A = np.eye(v) + rho * (np.swapaxes(HW, -2, -1).conj() @ HW)
+    Ainv = np.linalg.inv(A)
+    # A >= I (HPD), so diag(A^{-1}) is real in (0, 1]; clip guards roundoff
+    diag = np.clip(np.real(np.diagonal(Ainv, axis1=-2, axis2=-1)), 1e-15, 1.0)
+    rates = -np.sum(np.log2(diag), axis=-1)
+    return float(np.mean(rates))
+
+
 def mu_rate(H: np.ndarray, W: np.ndarray, rho: float) -> np.ndarray:
     """Per-user rates with inter-user interference (paper eq. ar-per-ue).
 
