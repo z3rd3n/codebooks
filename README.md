@@ -204,6 +204,45 @@ penalizes rotations *within* the reported span that do not affect the
 log-det rate — Type I's rigid rank-2 pair scores 0.26 column-wise but
 spans 0.52 of the subspace (fig_01), so SGCS alone overstates its deficit.
 
+## GLIMPSE — a one-sided learned scheme that beats the frontier
+
+`src/nr_csi/ml/` implements **GLIMPSE** (gNB-Learned Inversion of
+Measurement-Projected Subband Eigenvectors): a one-sided CSI-feedback scheme
+that beats the Type II codebook frontier on **both** overhead and fidelity
+while staying UE-feasible. The UE has **zero learned parameters** — it reports a
+fixed, published **Karhunen–Loève** sketch of the per-subband eigen precoder
+(the statistically-optimal upgrade of the codebooks' fixed DFT dictionary),
+standardized and quantized under a reverse-water-filling bit allocation. That
+is one `m×D` matrix multiply, spec-freezable like a codebook table and **8–64×
+cheaper than the R16 beam search** it replaces. The gNB reconstructs by **least
+squares** (a matrix multiply — no neural network needed), with an optional
+small unrolled decoder for out-of-distribution robustness. The only learned
+object is the offline-fitted KLT basis, a published constant; nothing learned
+crosses the air interface or the vendor boundary, so there is no two-sided
+inter-vendor training problem. Reports are *rateless* (any prefix is a valid
+lower-rate report — a continuous overhead knob). It implements the same
+`CodebookScheme` interface, so `nr_csi.eval.evaluate` scores it next to the
+3GPP codebooks on identical channels.
+
+On 38.901 CDL-C (P=32) it reaches a target SGCS at **48–63% fewer feedback
+bits** than the best codebook, and attains SGCS 0.98 (SE within 0.02 of the
+eigen bound) where no codebook exceeds 0.93. It wins on the in-distribution
+rich-scattering profiles (CDL-A/B/C) and — honestly — *loses* to the fixed-DFT
+codebooks on out-of-distribution near-LoS profiles (CDL-D/E). Full method,
+theory, complexity accounting, ablations, and the generalization limitation:
+[`docs/ml/glimpse.md`](docs/ml/glimpse.md); comparison figures and headline
+numbers: [`results/ml/`](results/ml/README.md).
+
+```bash
+pip install -e ".[sionna,dataset]"
+python scripts/dataset/generate_cdl_dataset.py --configs 4x4 --n-samples 60000 \
+    --profiles A,B,C --freq-res 64 --fft-size 256 --out data/cdl_p32
+python scripts/ml/prepare_targets.py data/cdl_p32 --n3 8 --out data/ml/targets_p32
+python scripts/ml/train_glimpse.py --data data/ml/targets_p32.npz --out models/glimpse_p32
+python scripts/ml/eval_glimpse.py --model models/glimpse_p32 --cdl C --out results/ml
+python scripts/ml/make_glimpse_figures.py --results results/ml --cdl C
+```
+
 ## Conventions
 
 * Channels: `H[slot, t, rx, port]`, `t = 0..N3-1` PMI frequency units.
